@@ -35,6 +35,7 @@ fileprivate func log(_ message: String) {
 #else
 
 fileprivate func log(_ message: String) {
+    // Log only if it's a preview
     guard ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" else {
         return
     }
@@ -67,8 +68,11 @@ fileprivate func floatString(_ value: CGFloat?) -> String {
 
 public struct ViewData {
     let view: UIView
+    
+    /// A view controller the ``view`` comes from
     let viewController: UIViewController?
 }
+
 
 fileprivate struct ViewMap<Item: Identifiable>: Identifiable {
     let item: Item
@@ -94,200 +98,35 @@ public protocol TagViewItem: AnyObject {
 }
 
 
-public class UITagView<Item: Identifiable>: UIView {
-    private var items = [ViewMap<Item>]()
+@MainActor
+private protocol CMTagViewDataSource: AnyObject {
+    var numItems: Int { get }
     
-    private var defaultWidth: CGFloat = 10
+    func calculateSizeThatFits(proposedWidth: CGFloat?, proposedHeight: CGFloat?) -> CGSize
+    func updateContentLayout()
+}
+
+
+private class CMTagViewStorage<Item: Identifiable>: CMTagViewDataSource {
+    private weak var owner: CMTagView!
+    fileprivate var items = [ViewMap<Item>]()
     
-    private var horizontalPadding: CGFloat = 8
-    private var verticalPadding: CGFloat = 8
     
-    private var horizontalSpacing: CGFloat = 8
-    private var verticalSpacing: CGFloat = 8
-    
-    private var animationDuration: CGFloat = 0.35   // Standard UIKit's animation duration
-    
-    
-    public override init(frame: CGRect) {
-        super.init(frame: frame)
-        initTagView()
-    }
-    
-    public required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        initTagView()
-    }
-    
-    private func initTagView() {
-        log("Init tag view")
-        
-        backgroundColor = .clear
-        
-        // Width is flexible, but height is always calculated based on width
-        
-        // Don't mind to be smaller than intrinsic width
-        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        // Resist being made smaller than intrinsic height
-        setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
-        
-        // Don't mind to be larger than intrinsic width
-        setContentHuggingPriority(.defaultLow, for: .horizontal)
-        // Resist being made larger than intrinsic height
-        setContentHuggingPriority(.defaultHigh, for: .vertical)
+    public var numItems: Int {
+        items.count
     }
     
     
-    /// Updates collection of items
-    public func updateContent(_ content: [Item], animated: Bool, viewGenerator: (_ item: Item) -> ViewData) {
-        func performWithOptionalAnimation(animation: @escaping () -> Void,
-                                          completion: @escaping (_ finished: Bool) -> Void) {
-            if animated {
-                UIView.animate(withDuration: animationDuration, delay: 0, options: [.allowUserInteraction], animations: animation, completion: completion)
-                return
-            }
-            
-            animation()
-            completion(true)
-        }
-        
-        
-        // Find added views
-        var addedItems = [ViewMap<Item>]()
-        for item in content {
-            if !items.contains(where: { $0.id == item.id }) {
-                let viewData = viewGenerator(item)
-                viewData.view.backgroundColor = .clear
-                let value = ViewMap(item: item, viewData: viewData)
-                addedItems.append(value)
-            }
-        }
-        
-        // Find removed views
-        var removedViews = [ViewMap<Item>]()
-        for item in items {
-            if !content.contains(where: { $0.id == item.id }) {
-                removedViews.append(item)
-            }
-        }
-        
-        // Animate removing views
-        performWithOptionalAnimation {
-            for item in removedViews {
-                let view = item.view
-                view.transform = .init(scaleX: 0.01, y: 0.01)
-                view.alpha = 0
-            }
-        } completion: { _ in
-            for item in removedViews {
-                let view = item.view
-                view.removeFromSuperview()
-            }
-        }
-        
-        // Animate adding views
-        for item in addedItems {
-            let view = item.view
-            addSubview(view)
-            view.transform = .init(scaleX: 0, y: 0)
-        }
-        performWithOptionalAnimation {
-            for item in addedItems {
-                let view = item.view
-                view.transform = .init(scaleX: 1, y: 1)
-            }
-        } completion: { _ in }
-        
-        // Update items collection
-        items.removeAll { item in
-            removedViews.contains(where: { $0.id == item.id })
-        }
-        items.append(contentsOf: addedItems)
-        for (index, item) in items.enumerated() {
-            item.view.layer.zPosition = CGFloat(index)
-        }
-        
-        // Update layout
-        performWithOptionalAnimation {
-            self.updateContentLayout(disablingAnimationsFor: addedItems)
-        } completion: { _ in }
-        invalidateIntrinsicContentSize()
+    init(owner: CMTagView) {
+        self.owner = owner
     }
     
     
-    //private var currentIntrinsicContentSize = CGSize(width: 10, height: 10)
-    public override var intrinsicContentSize: CGSize {
-        let size = calculateSizeThatFits(proposedWidth: frame.width, proposedHeight: 0)
-        
-        let w = floatString(size.width)
-        let h = floatString(size.height)
-        log("Request intrinsic content size: (\(w) x \(h))")
-        
-        return size
-    }
-    
-    
-    private func updateContentLayout(disablingAnimationsFor ignoredItems: [ViewMap<Item>] = []) {
-        log("Update content layout")
-#if false
-        let contentSize = calculateSizeThatFits(proposedWidth: frame.width, proposedHeight: frame.height)
-        let width = contentSize.width
-#else
-        let width = frame.width
-#endif
-        
-        
-        var height: CGFloat = verticalPadding
-        
-        if items.isEmpty {
-            return
-        }
-        
-        var currentRowItem: Int = 0
-        var currentRowWidth: CGFloat = horizontalPadding
-        var currentRowHeight: CGFloat = 0
-        
-        for item in items {
-            let view = item.view
-            let viewSize = view.intrinsicContentSize
-            
-            // Go to the new row if the view's width doesn't fit into the rest of the row
-            if currentRowItem > 0 && currentRowWidth + viewSize.width + horizontalPadding > width {
-                height += currentRowHeight + verticalSpacing
-                
-                // Reset counters
-                currentRowItem = 0
-                currentRowWidth = horizontalPadding
-                currentRowHeight = 0
-            }
-            
-            // Set item position and size, with animation if needed
-            let itemFrame: CGRect = .init(origin: .init(x: currentRowWidth, y: height), size: view.intrinsicContentSize)
-            if ignoredItems.contains(where: { $0.id == item.id }) {
-                UIView.performWithoutAnimation {
-                    view.frame = itemFrame
-                }
-            }
-            else {
-                view.frame = itemFrame
-            }
-            
-            // Update current row item, width and max height
-            currentRowItem += 1
-            currentRowWidth += viewSize.width + horizontalSpacing
-            currentRowHeight = max(currentRowHeight, viewSize.height)
-        }
-        
-        //currentIntrinsicContentSize = contentSize
-        // The tag view tries to take the maximum available width
-        //currentIntrinsicContentSize.width = UIView.noIntrinsicMetric
-    }
-    
-    
-    public override func sizeThatFits(_ size: CGSize) -> CGSize {
-        let fittingSize = calculateSizeThatFits(proposedWidth: size.width, proposedHeight: size.height)
-        log("UIKit request size that fits in (\(floatString(size.width)) x \(floatString(size.height))) - result (\(floatString(fittingSize.width)) x \(floatString(fittingSize.height)))")
-        return fittingSize
-    }
+    var defaultWidth: CGFloat { owner.defaultWidth }
+    var horizontalPadding: CGFloat { owner.horizontalPadding }
+    var verticalPadding: CGFloat { owner.verticalPadding }
+    var horizontalSpacing: CGFloat { owner.horizontalSpacing }
+    var verticalSpacing: CGFloat { owner.verticalSpacing }
     
     
     func calculateSizeThatFits(proposedWidth: CGFloat?, proposedHeight: CGFloat?) -> CGSize {
@@ -345,6 +184,265 @@ public class UITagView<Item: Identifiable>: UIView {
     }
     
     
+    func updateContentLayout() {
+        updateContentLayout(disablingAnimationsFor: [])
+    }
+    
+    
+    func updateContentLayout(disablingAnimationsFor ignoredItems: [ViewMap<Item>]) {
+        log("Update content layout")
+                
+#if false
+        let contentSize = calculateSizeThatFits(proposedWidth: frame.width, proposedHeight: frame.height)
+        let width = contentSize.width
+#else
+        let width = owner.frame.width
+#endif
+        
+        
+        var height: CGFloat = verticalPadding
+        
+        if items.isEmpty {
+            return
+        }
+        
+        var currentRowItem: Int = 0
+        var currentRowWidth: CGFloat = horizontalPadding
+        var currentRowHeight: CGFloat = 0
+        
+        for item in items {
+            let view = item.view
+            let viewSize = view.intrinsicContentSize
+            
+            // Go to the new row if the view's width doesn't fit into the rest of the row
+            if currentRowItem > 0 && currentRowWidth + viewSize.width + horizontalPadding > width {
+                height += currentRowHeight + verticalSpacing
+                
+                // Reset counters
+                currentRowItem = 0
+                currentRowWidth = horizontalPadding
+                currentRowHeight = 0
+            }
+            
+            // Set item position and size, with animation if needed
+            let itemFrame: CGRect = .init(origin: .init(x: currentRowWidth, y: height), size: view.intrinsicContentSize)
+            if ignoredItems.contains(where: { $0.id == item.id }) {
+                UIView.performWithoutAnimation {
+                    view.frame = itemFrame
+                }
+            }
+            else {
+                view.frame = itemFrame
+            }
+            
+            // Update current row item, width and max height
+            currentRowItem += 1
+            currentRowWidth += viewSize.width + horizontalSpacing
+            currentRowHeight = max(currentRowHeight, viewSize.height)
+        }
+        
+        //currentIntrinsicContentSize = contentSize
+        // The tag view tries to take the maximum available width
+        //currentIntrinsicContentSize.width = UIView.noIntrinsicMetric
+    }
+}
+
+
+/// A view that contains collection of tags.
+public class CMTagView: UIView {
+    private var storage: CMTagViewDataSource? = nil
+    
+    fileprivate var defaultWidth: CGFloat = 10
+    
+    fileprivate var horizontalPadding: CGFloat = 8
+    fileprivate var verticalPadding: CGFloat = 8
+    
+    fileprivate var horizontalSpacing: CGFloat = 8
+    fileprivate var verticalSpacing: CGFloat = 8
+    
+    fileprivate var animationDuration: CGFloat = 0.35   // Standard UIKit's animation duration
+    
+    
+    public override init(frame: CGRect) {
+        super.init(frame: frame)
+        initTagView()
+    }
+    
+    public required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        initTagView()
+    }
+    
+    private func initTagView() {
+        log("Init tag view")
+        
+        backgroundColor = .clear
+        
+        // Width is flexible, but height is always calculated based on width
+        
+        // Don't mind to be smaller than intrinsic width
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Resist being made smaller than intrinsic height
+        setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
+        
+        // Don't mind to be larger than intrinsic width
+        setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // Resist being made larger than intrinsic height
+        setContentHuggingPriority(.defaultHigh, for: .vertical)
+    }
+    
+    
+    /// Updates collection of items
+    public func updateContent<Item: Identifiable>(_ content: [Item], animated: Bool, owner: UIViewController? = nil, viewGenerator: (_ item: Item) -> ViewData) {
+        if storage == nil {
+            storage = CMTagViewStorage<Item>(owner: self)
+        }
+        
+        guard let storage = storage as? CMTagViewStorage<Item> else {
+            return
+        }
+        
+        func performWithOptionalAnimation(animation: @escaping () -> Void,
+                                          completion: @escaping (_ finished: Bool) -> Void) {
+            if animated {
+                UIView.animate(withDuration: animationDuration, delay: 0, options: [.allowUserInteraction], animations: animation, completion: completion)
+                return
+            }
+            
+            animation()
+            completion(true)
+        }
+        
+        
+        // Find added views
+        var addedItems = [ViewMap<Item>]()
+        for item in content {
+            if !storage.items.contains(where: { $0.id == item.id }) {
+                let viewData = viewGenerator(item)
+                viewData.view.backgroundColor = .clear
+                let value = ViewMap(item: item, viewData: viewData)
+                addedItems.append(value)
+            }
+        }
+        
+        // Find removed views
+        var removedViews = [ViewMap<Item>]()
+        for item in storage.items {
+            if !content.contains(where: { $0.id == item.id }) {
+                removedViews.append(item)
+            }
+        }
+        
+        // Animate removing views
+        performWithOptionalAnimation {
+            for item in removedViews {
+                let view = item.view
+                view.transform = .init(scaleX: 0.01, y: 0.01)
+                view.alpha = 0
+            }
+        } completion: { _ in
+            for item in removedViews {
+                // Child view controller needs to know that it will be removed soon
+                if let childController = item.viewController {
+                    childController.willMove(toParent: nil)
+                }
+                
+                // Remove child view
+                let view = item.view
+                view.removeFromSuperview()
+                
+                // Child view controller needs to be removed from view controller hierarchy
+                if let childController = item.viewController {
+                    childController.removeFromParent()
+                }
+            }
+        }
+        
+        // Animate adding views
+        for item in addedItems {
+            // Child view controller needs to know that it will be added soon
+            if let owner, let childController = item.viewController {
+                owner.addChild(childController)
+            }
+            
+            // Add child view
+            let view = item.view
+            addSubview(view)
+            view.transform = .init(scaleX: 0, y: 0)
+            
+            // Child view controller needs to know that it was added to a parent
+            if let owner, let childController = item.viewController {
+                childController.didMove(toParent: owner)
+            }
+        }
+        performWithOptionalAnimation {
+            for item in addedItems {
+                let view = item.view
+                view.transform = .init(scaleX: 1, y: 1)
+            }
+        } completion: { _ in }
+        
+        // Update items collection
+        storage.items.removeAll { item in
+            removedViews.contains(where: { $0.id == item.id })
+        }
+        storage.items.append(contentsOf: addedItems)
+        for (index, item) in storage.items.enumerated() {
+            item.view.layer.zPosition = CGFloat(index)
+        }
+        
+        // Update layout
+        performWithOptionalAnimation {
+            storage.updateContentLayout(disablingAnimationsFor: addedItems)
+        } completion: { _ in }
+        invalidateIntrinsicContentSize()
+    }
+    
+    
+    //private var currentIntrinsicContentSize = CGSize(width: 10, height: 10)
+    public override var intrinsicContentSize: CGSize {
+        let size = calculateSizeThatFits(proposedWidth: frame.width, proposedHeight: 0)
+        
+        let w = floatString(size.width)
+        let h = floatString(size.height)
+        log("Request intrinsic content size: (\(w) x \(h))")
+        
+        return size
+    }
+    
+    
+    public override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let fittingSize = calculateSizeThatFits(proposedWidth: size.width, proposedHeight: size.height)
+        log("UIKit request size that fits in (\(floatString(size.width)) x \(floatString(size.height))) - result (\(floatString(fittingSize.width)) x \(floatString(fittingSize.height)))")
+        return fittingSize
+    }
+    
+    
+    func calculateSizeThatFits(proposedWidth: CGFloat?, proposedHeight: CGFloat?) -> CGSize {
+        if let size = storage?.calculateSizeThatFits(proposedWidth: proposedWidth, proposedHeight: proposedHeight) {
+            return size
+        }
+        
+        let width: CGFloat = {
+            guard let proposedWidth else {
+                return defaultWidth
+            }
+            
+            guard !proposedWidth.isNaN else {
+                return defaultWidth
+            }
+            
+            guard !proposedWidth.isInfinite else {
+                return defaultWidth
+            }
+            
+            return proposedWidth
+        }()
+        
+        return .init(width: width, height: 0)
+    }
+    
+    
     public override var frame: CGRect {
         get {
             super.frame
@@ -355,7 +453,7 @@ public class UITagView<Item: Identifiable>: UIView {
             super.frame = newValue
             
             invalidateIntrinsicContentSize()
-            updateContentLayout()
+            storage?.updateContentLayout()
         }
     }
 }
@@ -363,64 +461,55 @@ public class UITagView<Item: Identifiable>: UIView {
 
 // MARK: - SwiftUI bridge
 
-// TODO: Use UIViewControllerRepresentable instead of UIViewRepresentable
-//public class UITagViewController<Identifier: Identifiable>: UIViewController {
-//    private let tagView: UITagView<Identifier>
-//
-//    init() {
-//        tagView = UITagView()
-//
-//        super.init()
-//        initTagView()
-//    }
-//
-//    public override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
-//        tagView = UITagView()
-//
-//        super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
-//        initTagView()
-//    }
-//
-//    public required init?(coder: NSCoder) {
-//        guard let tView = UITagView<Identifier>(coder: coder) else {
-//            return nil
-//        }
-//        tagView = tView
-//
-//        super.init(coder: coder)
-//        initTagView()
-//    }
-//
-//
-//    private func initTagView() {
-//        view = tagView
-//    }
-//
-//
-//    func update(_ controllers: [UIViewController]) {
-//        for controller in children {
-//            controller.removeFromParent()
-//        }
-//
-//        let views = controllers.map { $0.view! }
-//        tagView.updateContent(views)
-//
-//        for controller in controllers {
-//            addChild(controller)
-//            controller.didMove(toParent: self)
-//        }
-//
-//        preferredContentSize = tagView.intrinsicContentSize
-//    }
-//
-//
-//    func calculateSizeThatFits(proposedWidth: CGFloat?, proposedHeight: CGFloat?) -> CGSize {
-//        return tagView.calculateSizeThatFits(proposedWidth: proposedWidth, proposedHeight: proposedHeight)
-//    }
-//}
+public class CMTagViewController: UIViewController {
+    fileprivate let tagView: CMTagView
+    
+    
+    init() {
+        tagView = CMTagView()
+        super.init()
+        
+        initTagView()
+    }
+    
+    public override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+        tagView = CMTagView()
+        super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
+        
+        initTagView()
+    }
+    
+    required init?(coder: NSCoder) {
+        tagView = CMTagView()
+        super.init(coder: coder)
+        
+        initTagView()
+    }
+    
+    
+    private func initTagView() {
+        view = tagView
+    }
+    
+    
+    func updateContent<Item: Identifiable>(_ items: [Item], animated: Bool, viewGenerator: (_ item: Item) -> ViewData) {
+        for controller in children {
+            controller.removeFromParent()
+        }
+
+        tagView.updateContent(items, animated: animated, owner: self, viewGenerator: viewGenerator)
+
+        preferredContentSize = tagView.intrinsicContentSize
+    }
 
 
-public struct TagView<Item: Identifiable, V: View>: UIViewRepresentable {
+    func calculateSizeThatFits(proposedWidth: CGFloat?, proposedHeight: CGFloat?) -> CGSize {
+        return tagView.calculateSizeThatFits(proposedWidth: proposedWidth, proposedHeight: proposedHeight)
+    }
+}
+
+
+public struct TagView<Item: Identifiable, V: View>: UIViewControllerRepresentable {
     private let items: [Item]
     private let viewGenerator: (Item) -> V
     
@@ -432,14 +521,66 @@ public struct TagView<Item: Identifiable, V: View>: UIViewRepresentable {
     }
     
     
-    public func makeUIView(context: Context) -> UITagView<Item> {
+    public func makeUIViewController(context: Context) -> CMTagViewController {
+        log("Make UIViewController")
+        let controller = CMTagViewController()
+        return controller
+    }
+    
+    
+    public func updateUIViewController(_ uiViewController: CMTagViewController, context: Context) {
+        log("Update view controller with \(items.count) items")
+        
+        uiViewController.updateContent(items, animated: context.transaction.animation != nil) { item in
+            let swiftUIView = viewGenerator(item)
+            let hostingVC = UIHostingController(rootView: swiftUIView)
+            
+            // A very dangereous move
+            let view = hostingVC.view!
+            
+            if #available(iOS 16, *) {
+                hostingVC.sizingOptions = .intrinsicContentSize
+            }
+            
+            // TODO: Don't drop the view controller: https://medium.com/arcush-tech/two-pitfalls-to-avoid-when-working-with-uihostingcontroller-534d1507563e
+            return .init(view: view, viewController: hostingVC)
+        }
+    }
+    
+    
+    // TODO: On iOS 13-15 the view takes all vertical space
+    @available(iOS 16, *)
+    public func sizeThatFits(_ proposal: ProposedViewSize, uiViewController: CMTagViewController, context: Context) -> CGSize? {
+        let fittingSize = uiViewController.tagView.calculateSizeThatFits(proposedWidth: proposal.width, proposedHeight: proposal.height)
+        
+        log("SwiftUI request size that fits in (\(floatString(proposal.width)) x \(floatString(proposal.height))) - result (\(floatString(fittingSize.width)) x \(floatString(fittingSize.height)))")
+        
+        return fittingSize
+    }
+}
+
+
+@available(*, deprecated, message: "Use TagView instead")
+public struct OldTagView<Item: Identifiable, V: View>: UIViewRepresentable {
+    private let items: [Item]
+    private let viewGenerator: (Item) -> V
+    
+    
+    public init(_ items: [Item], viewGenerator: @escaping (Item) -> V) {
+        //log("Init OldTagView")
+        self.items = items
+        self.viewGenerator = viewGenerator
+    }
+    
+    
+    public func makeUIView(context: Context) -> CMTagView {
         log("Make UIView")
-        let tagView = UITagView<Item>()
+        let tagView = CMTagView()
         return tagView
     }
     
     
-    public func updateUIView(_ uiView: UITagView<Item>, context: Context) {
+    public func updateUIView(_ uiView: CMTagView, context: Context) {
         log("Update view with \(items.count) items")
         
         uiView.updateContent(items, animated: context.transaction.animation != nil) { item in
@@ -447,7 +588,7 @@ public struct TagView<Item: Identifiable, V: View>: UIViewRepresentable {
             let hostingVC = UIHostingController(rootView: swiftUIView)
             
             // A very dangereous move
-            let view =  hostingVC.view!
+            let view = hostingVC.view!
             
             //if #available(iOS 16, *) {
             //    hostingVC.sizingOptions = .intrinsicContentSize
@@ -460,7 +601,7 @@ public struct TagView<Item: Identifiable, V: View>: UIViewRepresentable {
     
     
     @available(iOS 16, *)
-    public func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITagView<Item>, context: Context) -> CGSize? {
+    public func sizeThatFits(_ proposal: ProposedViewSize, uiView: CMTagView, context: Context) -> CGSize? {
         let fittingSize = uiView.calculateSizeThatFits(proposedWidth: proposal.width, proposedHeight: proposal.height)
         
         log("SwiftUI request size that fits in (\(floatString(proposal.width)) x \(floatString(proposal.height))) - result (\(floatString(fittingSize.width)) x \(floatString(fittingSize.height)))")
@@ -472,14 +613,15 @@ public struct TagView<Item: Identifiable, V: View>: UIViewRepresentable {
 
 // MARK: - Testing
 
-struct SomeItem: Identifiable {
+struct TestItem: Identifiable {
     let id = UUID()
     let name: String
 }
 
 
-final class TestViewModel: ObservableObject {
-    @Published var items: [SomeItem] = [
+@available(iOS 18, *)
+@Observable class TestViewModel {
+    var items: [TestItem] = [
         .init(name: "First"),
         .init(name: "Second"),
         .init(name: "Third"),
@@ -502,7 +644,7 @@ final class TestViewModel: ObservableObject {
         .init(name: "Twentieth")
     ]
     
-    func removeItem(with id: SomeItem.ID) {
+    func removeItem(with id: TestItem.ID) {
         items.removeAll { $0.id == id }
     }
 }
@@ -510,18 +652,20 @@ final class TestViewModel: ObservableObject {
 
 @available(iOS 18, *)
 struct TestTagView: View {
+    @State var on: Bool = false
     var title: String
     var removeAction: () -> Void
     
     var body: some View {
         HStack {
             Text(title)
-                //.frame(height: CGFloat(10 + item.name.count * 5))
                 .font(.callout)
             
             Button {
+                // Remove item with animation
                 withAnimation {
                     removeAction()
+                    //on.toggle()
                 }
             } label: {
                 Image(systemName: "xmark")
@@ -531,7 +675,7 @@ struct TestTagView: View {
         .tint(Color(UIColor.label))
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Color(UIColor.secondarySystemBackground))
+        .background(on ? .green : Color(UIColor.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -539,15 +683,22 @@ struct TestTagView: View {
 
 @available(iOS 18, *)
 struct TagTestView: View {
-    @ObservedObject var viewModel: TestViewModel
+    private var viewModel = TestViewModel()
     
     var body: some View {
         VStack {
-            TagView(viewModel.items) { item in
-                TestTagView(title: item.name) {
-                    viewModel.removeItem(with: item.id)
+            //HStack {
+                TagView(viewModel.items) { item in
+                    TestTagView(title: item.name) {
+                        viewModel.removeItem(with: item.id)
+                    }
                 }
-            }
+                //.background(.gray)
+            //
+            //    //Spacer()
+            //
+            //    Text("Hello")
+            //}
             
             Button("Add tag") {
                 withAnimation {
@@ -563,5 +714,5 @@ struct TagTestView: View {
 
 @available(iOS 18, *)
 #Preview {
-    TagTestView(viewModel: .init())
+    TagTestView()
 }
