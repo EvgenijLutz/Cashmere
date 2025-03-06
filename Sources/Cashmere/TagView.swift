@@ -5,6 +5,8 @@
 //  Created by Evgenij Lutz on 14.11.24.
 //
 
+#if os(iOS)
+
 import UIKit
 import SwiftUI
 import OSLog
@@ -212,7 +214,9 @@ private class CMTagViewStorage<Item: Identifiable>: CMTagViewDataSource {
         
         for item in items {
             let view = item.view
-            let viewSize = view.intrinsicContentSize
+            //let viewSize = view.intrinsicContentSize
+            //let viewSize = view.frame.size
+            let viewSize = Int(view.frame.size.height) == 0 ? view.intrinsicContentSize : view.frame.size
             
             // Go to the new row if the view's width doesn't fit into the rest of the row
             if currentRowItem > 0 && currentRowWidth + viewSize.width + horizontalPadding > width {
@@ -225,7 +229,7 @@ private class CMTagViewStorage<Item: Identifiable>: CMTagViewDataSource {
             }
             
             // Set item position and size, with animation if needed
-            let itemFrame: CGRect = .init(origin: .init(x: currentRowWidth, y: height), size: view.intrinsicContentSize)
+            let itemFrame: CGRect = .init(origin: .init(x: currentRowWidth, y: height), size: viewSize)
             if ignoredItems.contains(where: { $0.id == item.id }) {
                 UIView.performWithoutAnimation {
                     view.frame = itemFrame
@@ -716,3 +720,5 @@ struct TagTestView: View {
 #Preview {
     TagTestView()
 }
+
+#endif
