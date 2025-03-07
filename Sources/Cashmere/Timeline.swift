@@ -9,9 +9,16 @@ import CMPlatform
 import SwiftUI
 
 
+// Og sjógvurin tyngist
+// Alt togar móti dýpinum
+// Eg veit eg má fara
+// Eg veit at eg kann
+
+
 // MARK: Point
 
-public struct TMPoint: Sendable {
+/// Because there is never enough implementations of a point in 2D space.
+public struct CMPoint: Sendable {
     public var x: Float
     public var y: Float
     
@@ -33,7 +40,8 @@ public struct TMPoint: Sendable {
         sqrt(x * x + y * y)
     }
     
-    public var normalized: TMPoint {
+    /// Salti∂ í kroppinum
+    public var normalized: CMPoint {
         let len = length
         guard abs(len) > 0.00001 else {
             return .init(x: 1, y: 0)
@@ -42,30 +50,30 @@ public struct TMPoint: Sendable {
         return .init(x: x / length, y: y / length)
     }
     
-    public static func + (lhs: TMPoint, rhs: TMPoint) -> TMPoint {
+    public static func + (lhs: CMPoint, rhs: CMPoint) -> CMPoint {
         .init(x: lhs.x + rhs.x, y: lhs.y + rhs.y)
     }
     
-    public static func - (lhs: TMPoint, rhs: TMPoint) -> TMPoint {
+    public static func - (lhs: CMPoint, rhs: CMPoint) -> CMPoint {
         .init(x: lhs.x - rhs.x, y: lhs.y - rhs.y)
     }
     
-    public static func * (lhs: TMPoint, rhs: Float) -> TMPoint {
+    public static func * (lhs: CMPoint, rhs: Float) -> CMPoint {
         .init(x: lhs.x * rhs, y: lhs.y * rhs)
     }
     
-    public static func / (lhs: TMPoint, rhs: Float) -> TMPoint {
+    public static func / (lhs: CMPoint, rhs: Float) -> CMPoint {
         .init(x: lhs.x / rhs, y: lhs.y / rhs)
     }
 }
 
 
-public prefix func - (value: TMPoint) -> TMPoint {
+public prefix func - (value: CMPoint) -> CMPoint {
     .init(x: -value.x, y: -value.y)
 }
 
 
-public extension TMPoint {
+public extension CMPoint {
     func makeCGPoint(offset: CGPoint, scaleX: CGFloat, scaleY: CGFloat) -> CGPoint {
         .init(
             x: offset.x + CGFloat(x) * scaleX,
@@ -78,9 +86,9 @@ public extension TMPoint {
 // MARK: Record
 
 public struct TMRecord: Sendable {
-    public var point: TMPoint
+    public var point: CMPoint
     
-    public init(point: TMPoint) {
+    public init(point: CMPoint) {
         self.point = point
     }
     
@@ -88,13 +96,13 @@ public struct TMRecord: Sendable {
         point = .init(x: x, y: y)
     }
     
-    public var localControl1: TMPoint = .init(x: -0.5, y: 0)
-    public var globalControl1: TMPoint {
+    public var localControl1: CMPoint = .init(x: -0.5, y: 0)
+    public var globalControl1: CMPoint {
         point + localControl1
     }
     
-    public var localControl2: TMPoint = .init(x: 0.5, y: 0)
-    public var globalControl2: TMPoint {
+    public var localControl2: CMPoint = .init(x: 0.5, y: 0)
+    public var globalControl2: CMPoint {
         point + localControl2
     }
 }
@@ -102,16 +110,58 @@ public struct TMRecord: Sendable {
 
 // MARK: Axis
 
-struct TMData: Sendable {
+@MainActor
+public class TMAxis {
+    weak var view: CMTimelineEditor?
     var name: String
     var points: [TMRecord]
     
-    init(name: String, points: [TMRecord]) {
+#if os(macOS)
+    let label = NSTextField(labelWithString: "")
+#elseif os(iOS)
+    let label = UILabel()
+#endif
+    
+    
+    init(view: CMTimelineEditor, name: String, points: [TMRecord]) {
+        self.view = view
         self.name = name
         self.points = points
+        
+        // Add label
+#if os(macOS)
+        label.stringValue = name
+#elseif os(iOS)
+        label.text = name
+#endif
+        label.sizeToFit()
+        view.navigatorContentView.addSubview(label)
     }
     
-    mutating func resetControlPoints() {
+    
+    /// Adds a point.
+    public func addPoint(_ point: CMPoint) {
+        // Insert point
+        var pointIndex = 0
+        let numPoints = points.count
+        for index in 0 ..< numPoints {
+            if points[index].point.x >= point.x {
+                break
+            }
+            
+            pointIndex += 1
+        }
+        points.insert(.init(point: point), at: pointIndex)
+        
+        // Schedule update
+        guard let view else {
+            return
+        }
+        view.invalidateLayout()
+    }
+    
+    
+    func resetControlPoints() {
         guard !points.isEmpty else {
             return
         }
@@ -158,281 +208,76 @@ struct TMData: Sendable {
 }
 
 
-extension TMData {
-    
-}
-
-
 // MARK: Group
 
 @MainActor
-class TMGroup {
+public class TMGroup {
+    // TODO: Make optional, remove force unwrap
+    weak var view: CMTimelineEditor!
     var name: String // = "Position"
-    var axes: [TMData]
+    var axes: [TMAxis]
     
-    init(name: String, axes: [TMData]) {
+    // Where this group offset starts
+    //var yOffset: CGFloat = 0
+    var axisLayers: [TMAxisLayer] = []
+    
+#if os(macOS)
+    let label = NSTextField(labelWithString: "")
+#elseif os(iOS)
+    let label = UILabel()
+#endif
+    
+    
+    init(view: CMTimelineEditor, name: String, axes: [TMAxis]) {
+        self.view = view
         self.name = name
         self.axes = axes
-    }
-}
-
-
-extension TMGroup {
-    static var mockPosition: TMGroup {
-        .init(name: "Position", axes: [
-            .init(name: "x", points: [
-                .init(0, 0.1),
-                .init(1, 1.5),
-                .init(2, -0.6),
-                .init(3, 0.4),
-                .init(4, 0.9),
-            ]),
-            .init(name: "y", points: [
-                .init(0, 0.55),
-                .init(1, -0.01),
-                .init(2, 0.4),
-                .init(3, -0.2),
-                .init(4, 0.35),
-            ]),
-            .init(name: "z", points: [
-                .init(0, 0.95),
-                .init(1, 0.2),
-                .init(2, -0.1),
-                .init(3, -0.3),
-                .init(4, 0.15),
-            ])
-        ])
-    }
-    
-    
-    static var mockRotation: TMGroup {
-        .init(name: "Rotation", axes: [
-            .init(name: "x", points: [
-                .init(0, 0.1),
-                .init(1, 1.5),
-                .init(2, -0.6),
-                .init(3, 0.4),
-                .init(4, 0.9),
-            ]),
-            .init(name: "y", points: [
-                .init(0, 0.55),
-                .init(1, -0.01),
-                .init(2, 0.4),
-                .init(3, -0.2),
-                .init(4, 0.35),
-            ]),
-            .init(name: "z", points: [
-                .init(0, 0.95),
-                .init(1, 0.2),
-                .init(2, -0.1),
-                .init(3, -0.3),
-                .init(4, 0.15),
-            ])
-        ])
-    }
-}
-
-
-// MARK: Collection
-
-@MainActor
-class TMCollection {
-    weak var view: CMTimelineView?
-    var name: String
-    var groups: [TMGroup]
-    
-    var children: [TMCollection]
-    
-    init(view: CMTimelineView, name: String, groups: [TMGroup], children: [TMCollection]) {
-        self.view = view
-        self.name = name
-        self.groups = groups
-        self.children = children
-    }
-}
-
-
-extension TMCollection {
-    static func mockLeg(view: CMTimelineView, side: String) -> TMCollection {
-        .init(view: view, name: "Hip \(side)", groups: [
-            .mockRotation
-        ], children: [
-            .init(view: view, name: "Leg \(side)", groups: [
-                .mockRotation
-            ], children: [
-                .init(view: view, name: "Foot \(side)", groups: [
-                    .mockRotation
-                ], children: []),
-            ]),
-        ])
-    }
-    
-    
-    static func mockArm(view: CMTimelineView, side: String) -> TMCollection {
-        .init(view: view, name: "Shoulder \(side)", groups: [
-            .mockRotation
-        ], children: [
-            .init(view: view, name: "Arm \(side)", groups: [
-                .mockRotation
-            ], children: [
-                .init(view: view, name: "Hand \(side)", groups: [
-                    .mockRotation
-                ], children: []),
-            ]),
-        ])
-    }
-}
-
-
-// MARK: Delegate
-
-public protocol CMTimelimeViewDelegate: AnyObject {
-    // Call setNeedsLayout() by every change
-}
-
-
-// MARK: Data source
-
-@MainActor
-class TimelineViewModel {
-    weak var view: CMTimelineView?
-    var collections: [TMCollection]
-    
-    init(view: CMTimelineView, collections: [TMCollection]) {
-        self.view = view
-        self.collections = collections
-    }
-}
-
-
-extension TimelineViewModel {
-    static func mock(view: CMTimelineView) -> TimelineViewModel {
-        return TimelineViewModel(view: view, collections: [
-            .init(
-                view: view,
-                name: "Root",
-                groups: [
-                    .mockPosition,
-                    .mockRotation
-                ], children: [
-                    .mockLeg(view: view, side: "left"),
-                    .mockLeg(view: view, side: "right"),
-                    .init(view: view, name: "Torso", groups: [
-                        .mockRotation
-                    ], children: [
-                        .mockArm(view: view, side: "left"),
-                        .mockArm(view: view, side: "right"),
-                        .init(view: view, name: "Head", groups: [
-                            .mockRotation
-                        ], children: []),
-                    ]),
-                ]
-            )
-        ])
         
-    }
-}
-
-
-// MARK: Timeline view
-
-public class CMTimelineView: PlatformView {
-    var axes: [TMData] = [
-        .init(name: "Rotation X", points: [
-            .init(0, 0.1),
-            .init(1, 1.5),
-            .init(2, -0.6),
-            .init(3, 0.4),
-            .init(4, 0.9),
-        ]),
-        .init(name: "Rotation Y", points: [
-            .init(0, 0.55),
-            .init(1, -0.01),
-            .init(2, 0.4),
-            .init(3, -0.2),
-            .init(4, 0.35),
-        ]),
-        .init(name: "Rotation Z", points: [
-            .init(0, 0.95),
-            .init(1, 0.2),
-            .init(2, -0.1),
-            .init(3, -0.3),
-            .init(4, 0.15),
-        ])
-    ]
-    
-    
-    
-    
-    private var currentColorIndex = 0
-    private let colors: [PlatformColor] = [
-        .red.darken(by: 0.9),
-        .green.darken(by: 0.8),
-        .blue.darken(by: 0.9)
-    ]
-    
-    
-    
-    var eyeRadius: CGFloat = 4.5 {
-        didSet {
-            // Rebuild eyelid paths
-        }
+        // Add label
+#if os(macOS)
+        label.stringValue = name
+#elseif os(iOS)
+        label.text = name
+#endif
+        label.sizeToFit()
+        view.navigatorContentView.addSubview(label)
     }
     
-    var eyelidThickness: CGFloat = 3 {
-        didSet {
-            for axisLayer in axisLayers {
-                axisLayer.pointsLayer.lineWidth = eyelidThickness
-            }
-        }
-    }
     
-    var eyeColor: PlatformColor = .dynamic(
-        PlatformColor.white,
-        PlatformColor.white.darken(by: 0.8)
-    )
-    
-    var mustacheTipRadius: CGFloat = 3
-    
-    var mustacheColor: PlatformColor = .dynamic(
-        PlatformColor.black.withAlphaComponent(0.2),
-        PlatformColor.white.withAlphaComponent(0.75)//.darken(by: 0.8)
-    )
-    
-    
-    struct AxisLayer {
-        let bezierLayer: CAShapeLayer
-        let mustacheLayer: CAShapeLayer
-        let mustacheTipsLayer: CAShapeLayer
-        let pointsLayer: CAShapeLayer
-    }
-    var axisLayers: [AxisLayer] = []
+    // MARK: Bézier curves, mustaches and control points
     
     private func addAxisLayer(color: PlatformColor) {
+        guard let view else {
+            return
+        }
+        
         let bezierLayer = CAShapeLayer()
         let mustacheLayer = CAShapeLayer()
         let mustacheTipsLayer = CAShapeLayer()
         let pointsLayer = CAShapeLayer()
         
-        withLayer { layer in
+        view.curveContentView.withLayer { layer in
+            //bezierLayer.backgroundColor = PlatformColor.black.withAlphaComponent(0.1).cgColor
             bezierLayer.fillColor = nil
             bezierLayer.strokeColor = color.cgColor
-            bezierLayer.lineWidth = 3
+            bezierLayer.lineWidth = view.curveThickness
+            bezierLayer.masksToBounds = false
             layer.addSublayer(bezierLayer)
             
             mustacheLayer.fillColor = nil
-            mustacheLayer.strokeColor = mustacheColor.cgColor
-            mustacheLayer.lineWidth = 1
+            mustacheLayer.strokeColor = view.mustacheColor.cgColor
+            mustacheLayer.lineWidth = view.mustacheThickness
+            mustacheLayer.masksToBounds = false
             layer.addSublayer(mustacheLayer)
             
             mustacheTipsLayer.fillColor = PlatformColor.white.cgColor
-            mustacheTipsLayer.strokeColor = mustacheColor.cgColor
-            mustacheTipsLayer.lineWidth = 1
+            mustacheTipsLayer.strokeColor = view.mustacheColor.cgColor
+            mustacheTipsLayer.lineWidth = view.mustacheThickness
             layer.addSublayer(mustacheTipsLayer)
             
-            pointsLayer.fillColor = eyeColor.cgColor
+            pointsLayer.fillColor = view.eyeColor.cgColor
             pointsLayer.strokeColor = color.cgColor
-            pointsLayer.lineWidth = eyelidThickness
+            pointsLayer.lineWidth = view.eyelidThickness
             layer.addSublayer(pointsLayer)
             
         }
@@ -448,108 +293,6 @@ public class CMTimelineView: PlatformView {
     }
     
     
-    public override func setupLayout() {
-        setWantsLayer()
-        
-        // Fill with random points
-#if false
-        for index in axes.indices {
-            axes[index].points.removeAll()
-        }
-        
-        for axisIndex in axes.indices {
-            for index in 0...50 {
-                axes[axisIndex].points.append(
-                    .init(Float(index), 0)
-                )
-            }
-        }
-#endif
-        
-        
-#if os(iOS)
-        backgroundColor = .secondarySystemBackground
-#endif
-        
-        for index in axes.indices {
-            axes[index].resetControlPoints()
-        }
-        
-        //animateChange()
-    }
-    
-    
-    
-    private func animateChange() {
-        Task {
-            try await Task.sleep(nanoseconds: 1_000_000_000 / 2)
-            //try await Task.sleep(nanoseconds: 350_000_000)
-            
-            
-            for axisIndex in axes.indices {
-                for pointIndex in axes[axisIndex].points.indices {
-                    let point = axes[axisIndex].points[pointIndex].point
-                    axes[axisIndex].points[pointIndex].point = .init(x: point.x, y: .random(in: -1...1))
-                }
-                axes[axisIndex].resetControlPoints()
-            }
-            updateCurves(animated: true)
-            
-            animateChange()
-        }
-    }
-    
-    
-    
-    let padding: CGFloat = 20
-    
-    //let xScale: CGFloat = 90
-    var xScale: CGFloat {
-        let minXValue: Float = 0
-        guard let maxXValue = axes.flatMap({ $0.points.map { $0.point.x }}).max() else {
-            return 1
-        }
-        
-        let range = maxXValue - minXValue
-        guard range > 0.00001 else {
-            return 1
-        }
-        
-        
-        return (bounds.width - padding - padding) / CGFloat(range)
-    }
-    
-    var yScale: CGFloat = 50
-    
-    //let offset = CGPoint(x: 20, y: bounds.height / 2)
-    var offset: CGPoint {
-        CGPoint(x: padding, y: bounds.height / 2)
-    }
-    
-    func cgPoint(_ point: TMPoint) -> CGPoint {
-        point.makeCGPoint(offset: offset, scaleX: xScale, scaleY: yScale)
-    }
-    
-    
-    public override func updateLayout() {
-        updateCurves()
-        
-        for layer in axisLayers {
-            layer.bezierLayer.frame = bounds
-            layer.pointsLayer.frame = bounds
-        }
-    }
-    
-    public override func scrollWheel(with event: NSEvent) {
-        yScale += event.scrollingDeltaY * 0.1
-        updateCurves()
-    }
-}
-
-
-// MARK: Bézier curves, mustaches and control points
-
-extension CMTimelineView {
     private func initiateAnimation(for targetLayer: CAShapeLayer, _ animated: Bool) -> CABasicAnimation? {
         guard animated else {
             return nil
@@ -571,6 +314,12 @@ extension CMTimelineView {
         
         animation.toValue = targetLayer.path
         targetLayer.add(animation, forKey: "some key")
+    }
+    
+    
+    private func cgPoint(_ point: CMPoint) -> CGPoint {
+        let offset = CGPoint(x: 0, y: view.axisHeight / 2)
+        return point.makeCGPoint(offset: offset, scaleX: view.xScale, scaleY: view.axisHeight / 2)
     }
     
     
@@ -643,16 +392,16 @@ extension CMTimelineView {
             let gPoint2 = cgPoint(record.globalControl2)
             
             path.move(to: gPoint1)
-            path.addEllipse(in: .init(x: gPoint1.x - mustacheTipRadius,
-                                      y: gPoint1.y - mustacheTipRadius,
-                                      width: mustacheTipRadius * 2,
-                                      height: mustacheTipRadius * 2))
+            path.addEllipse(in: .init(x: gPoint1.x - view.mustacheTipRadius,
+                                      y: gPoint1.y - view.mustacheTipRadius,
+                                      width: view.mustacheTipRadius * 2,
+                                      height: view.mustacheTipRadius * 2))
             
             path.move(to: gPoint2)
-            path.addEllipse(in: .init(x: gPoint2.x - mustacheTipRadius,
-                                      y: gPoint2.y - mustacheTipRadius,
-                                      width: mustacheTipRadius * 2,
-                                      height: mustacheTipRadius * 2))
+            path.addEllipse(in: .init(x: gPoint2.x - view.mustacheTipRadius,
+                                      y: gPoint2.y - view.mustacheTipRadius,
+                                      width: view.mustacheTipRadius * 2,
+                                      height: view.mustacheTipRadius * 2))
         }
         
         targetLayer.path = path
@@ -669,10 +418,10 @@ extension CMTimelineView {
         for record in records {
             let point = cgPoint(record.point)
             
-            path.addEllipse(in: .init(x: point.x - eyeRadius,
-                                      y: point.y - eyeRadius,
-                                      width: eyeRadius * 2,
-                                      height: eyeRadius * 2))
+            path.addEllipse(in: .init(x: point.x - view.eyeRadius,
+                                      y: point.y - view.eyeRadius,
+                                      width: view.eyeRadius * 2,
+                                      height: view.eyeRadius * 2))
         }
         
         targetLayer.path = path
@@ -681,13 +430,13 @@ extension CMTimelineView {
     }
     
     
-    private func updateCurves(animated: Bool = false) {
+    private func updateCurves(animated: Bool) {
         while axisLayers.count < axes.count {
             //addAxisLayer(color: .gray)
             
-            addAxisLayer(color: colors[currentColorIndex])
+            addAxisLayer(color: view.colors[view.currentColorIndex])
             
-            currentColorIndex = (currentColorIndex + 1) % colors.count
+            view.currentColorIndex = (view.currentColorIndex + 1) % view.colors.count
         }
         
         while axisLayers.count > axes.count {
@@ -705,7 +454,609 @@ extension CMTimelineView {
         }
     }
     
+    
+    func updateLayout(level: Int, yOffset: CGFloat, width: CGFloat, height: CGFloat, animated: Bool) -> CGFloat {
+        guard let view else {
+            return yOffset
+        }
+        
+        let padding: CGFloat = 8
+        
+        var currentYOffset = yOffset
+        
+        
+        // Navigator size
+        let navigatorFrame = view.navigatorContentView.frame
+        
+        // Label
+        var labelFrame = label.frame
+        labelFrame.origin = .init(
+            x: navigatorFrame.width - labelFrame.width - padding,
+            y: currentYOffset
+        )
+        label.frame = labelFrame
+        currentYOffset += labelFrame.height + 8
+        
+        
+        // Update curves
+        updateCurves(animated: animated)
+        
+        
+        // Update layer frame
+        for index in axes.indices {
+            // Label
+            let axis = axes[index]
+            var axisFrame = axis.label.frame
+            axisFrame.origin = .init(
+                x: navigatorFrame.width - axisFrame.width - padding,
+                y: currentYOffset
+            )
+            axis.label.frame = axisFrame
+            
+            // Layer
+            let layer = axisLayers[index]
+            let layerFrame = PlatformRect(
+                origin: .init(x: 0, y: currentYOffset),
+                size: .init(width: width, height: height)
+            )
+            layer.bezierLayer.frame = layerFrame
+            layer.mustacheLayer.frame = layerFrame
+            layer.mustacheTipsLayer.frame = layerFrame
+            layer.pointsLayer.frame = layerFrame
+            
+            // Height
+            currentYOffset += height
+        }
+        
+        return currentYOffset
+    }
 }
+
+
+extension TMGroup {
+    static func mockPosition(view: CMTimelineEditor) -> TMGroup {
+        .init(view: view, name: "Position", axes: [
+            .init(view: view, name: "x", points: [
+                .init(0, 0.1),
+                .init(1, 1.0),
+                .init(2, -0.6),
+                .init(3, 0.4),
+                .init(4, 0.9),
+            ]),
+            .init(view: view, name: "y", points: [
+                .init(0, 0.55),
+                .init(1, -0.01),
+                .init(2, 0.4),
+                .init(3, -0.2),
+                .init(4, 0.35),
+            ]),
+            .init(view: view, name: "z", points: [
+                .init(0, 0.95),
+                .init(1, 0.2),
+                .init(2, -0.1),
+                .init(3, -0.3),
+                .init(4, 0.15),
+            ])
+        ])
+    }
+    
+    
+    static func mockRotation(view: CMTimelineEditor) -> TMGroup {
+        .init(view: view, name: "Rotation", axes: [
+            .init(view: view, name: "x", points: [
+                .init(0, 0.1),
+                .init(1, 1.0),
+                .init(2, -0.6),
+                .init(3, 0.4),
+                .init(4, 0.9),
+            ]),
+            .init(view: view, name: "y", points: [
+                .init(0, 0.55),
+                .init(1, -0.01),
+                .init(2, 0.4),
+                .init(3, -0.2),
+                .init(4, 0.35),
+            ]),
+            .init(view: view, name: "z", points: [
+                .init(0, 0.95),
+                .init(1, 0.2),
+                .init(2, -0.1),
+                .init(3, -0.3),
+                .init(4, 0.15),
+            ])
+        ])
+    }
+}
+
+
+// MARK: Collection
+
+struct TMAxisLayer {
+    let bezierLayer: CAShapeLayer
+    let mustacheLayer: CAShapeLayer
+    let mustacheTipsLayer: CAShapeLayer
+    let pointsLayer: CAShapeLayer
+}
+
+
+@MainActor
+class TMCollection {
+    weak var view: CMTimelineEditor!
+    var name: String
+    var groups: [TMGroup]
+    
+    var children: [TMCollection]
+    
+#if os(macOS)
+    let label = NSTextField(labelWithString: "")
+#elseif os(iOS)
+    let label = UILabel()
+#endif
+    
+    
+    init(view: CMTimelineEditor, name: String, groups: [TMGroup], children: [TMCollection]) {
+        self.view = view
+        self.name = name
+        self.groups = groups
+        self.children = children
+        
+        // Add label
+#if os(macOS)
+        label.stringValue = name
+#elseif os(iOS)
+        label.text = name
+#endif
+        label.sizeToFit()
+        view.navigatorContentView.addSubview(label)
+    }
+    
+    
+    func resetControlPoints() {
+        for group in groups {
+            for index in group.axes.indices {
+                group.axes[index].resetControlPoints()
+            }
+        }
+        
+        for child in children {
+            child.resetControlPoints()
+        }
+    }
+    
+    
+    func updateLayout(level: Int, yOffset: CGFloat, width: CGFloat, height: CGFloat, animated: Bool) -> CGFloat {
+        let padding: CGFloat = 8
+        
+        var currentYOffset = yOffset + padding
+        
+        var axisFrame = label.frame
+        axisFrame.origin = .init(
+            x: padding + CGFloat(level * 24),
+            y: currentYOffset
+        )
+        label.frame = axisFrame
+        currentYOffset += axisFrame.height + padding
+        
+        for group in groups {
+            currentYOffset = group.updateLayout(level: level, yOffset: currentYOffset, width: width, height: height, animated: animated)
+        }
+        
+        for child in children {
+            currentYOffset = child.updateLayout(level: level + 1, yOffset: currentYOffset, width: width, height: height, animated: animated)
+        }
+        
+        return currentYOffset
+    }
+}
+
+
+extension TMCollection {
+    static func mockLeg(view: CMTimelineEditor, side: String) -> TMCollection {
+        .init(view: view, name: "Hip \(side)", groups: [
+            .mockRotation(view: view)
+        ], children: [
+            .init(view: view, name: "Leg \(side)", groups: [
+                .mockRotation(view: view)
+            ], children: [
+                .init(view: view, name: "Foot \(side)", groups: [
+                    .mockRotation(view: view)
+                ], children: []),
+            ]),
+        ])
+    }
+    
+    
+    static func mockArm(view: CMTimelineEditor, side: String) -> TMCollection {
+        .init(view: view, name: "Shoulder \(side)", groups: [
+            .mockRotation(view: view)
+        ], children: [
+            .init(view: view, name: "Arm \(side)", groups: [
+                .mockRotation(view: view)
+            ], children: [
+                .init(view: view, name: "Hand \(side)", groups: [
+                    .mockRotation(view: view)
+                ], children: []),
+            ]),
+        ])
+    }
+}
+
+
+// MARK: Delegate
+
+public protocol CMTimelimeViewDelegate: AnyObject {
+    // Call setNeedsLayout() by every change
+}
+
+
+// MARK: Data source
+
+@MainActor
+class TimelineEditorModel {
+    weak var view: CMTimelineEditor!
+    var collections: [TMCollection]
+    
+    init(view: CMTimelineEditor, collections: [TMCollection]) {
+        self.view = view
+        self.collections = collections
+    }
+    
+    
+    func updateLayout(animated: Bool) -> CGSize {
+        var yOffset: CGFloat = 0
+        let width = view.xScale * CGFloat(view.maxXValue)
+        let height = view.axisHeight
+        
+        for collection in collections {
+            yOffset = collection.updateLayout(level: 0, yOffset: yOffset, width: width, height: height, animated: animated)
+        }
+        
+        return .init(width: width, height: yOffset)
+    }
+}
+
+
+extension TimelineEditorModel {
+    static func mock(view: CMTimelineEditor) -> TimelineEditorModel {
+        return TimelineEditorModel(view: view, collections: [
+            .init(
+                view: view,
+                name: "Root",
+                groups: [
+                    .mockPosition(view: view),
+                    .mockRotation(view: view)
+                ], children: [
+                    .mockLeg(view: view, side: "left"),
+                    .mockLeg(view: view, side: "right"),
+                    .init(view: view, name: "Torso", groups: [
+                        .mockRotation(view: view)
+                    ], children: [
+                        .mockArm(view: view, side: "left"),
+                        .mockArm(view: view, side: "right"),
+                        .init(view: view, name: "Head", groups: [
+                            .mockRotation(view: view)
+                        ], children: []),
+                    ]),
+                ]
+            )
+        ])
+        
+    }
+}
+
+
+// MARK: Timeline editor
+
+public class CMTimelineEditor: PlatformView {
+    var contents: TimelineEditorModel!
+    
+    /// Contains curves, points and mustaches
+    let contentView = PlatformView()
+    let scrollView = PlatformScrollView()
+    
+    /// Contains curves, points and mustaches
+    let curveContentView = PlatformView()
+    /// Navigator
+    let navigatorContentView = PlatformView()
+    let navigatorDivider = PlatformView()
+    
+    
+    var axisHeight: CGFloat = 64
+    
+    fileprivate var currentColorIndex = 0
+    fileprivate let colors: [PlatformColor] = [
+        .red.darken(by: 0.9),
+        .green.darken(by: 0.8),
+        .blue.darken(by: 0.9)
+    ]
+    
+    
+    var curveThickness: CGFloat = 3 {
+        didSet {
+            //
+        }
+    }
+    
+    
+    var eyeRadius: CGFloat = 4 {
+        didSet {
+            // Rebuild eyelid paths
+        }
+    }
+    
+    var eyelidThickness: CGFloat = 3 {
+        didSet {
+            //for axisLayer in axisLayers {
+            //    axisLayer.pointsLayer.lineWidth = eyelidThickness
+            //}
+        }
+    }
+    
+    var eyeColor: PlatformColor = .dynamic(
+        PlatformColor.white,
+        PlatformColor.white.darken(by: 0.8)
+    )
+    
+    
+    var mustacheThickness: CGFloat = 2
+    
+    var mustacheTipRadius: CGFloat = 3
+    
+    var mustacheColor: PlatformColor = .dynamic(
+        PlatformColor.black.withAlphaComponent(0.5),
+        PlatformColor.white.withAlphaComponent(0.75)//.darken(by: 0.8)
+    )
+    
+    
+    public override func setupLayout() {
+        contents = .mock(view: self)
+        
+        setWantsLayer()
+        
+        
+        // Curves
+        contentView.setWantsLayer()
+#if os(macOS)
+        scrollView.documentView = contentView
+        contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(scrollContentViewBoundsChange),
+                                               name: NSView.boundsDidChangeNotification,
+                                               object: scrollView.contentView)
+#elseif os(iOS)
+        scrollView.delegate = self
+        scrollView.addSubview(contentView)
+#endif
+        addSubview(scrollView)
+        
+        
+        // Curve content view
+        curveContentView.setWantsLayer()
+        contentView.addSubview(curveContentView)
+        
+        
+        // Navigator
+        navigatorContentView.setWantsLayer()
+        contentView.addSubview(navigatorContentView)
+        
+        navigatorContentView.addSubview(navigatorDivider)
+        
+        
+        // Fill with random points
+#if false
+        for index in axes.indices {
+            axes[index].points.removeAll()
+        }
+        
+        for axisIndex in axes.indices {
+            for index in 0...50 {
+                axes[axisIndex].points.append(
+                    .init(Float(index), 0)
+                )
+            }
+        }
+#endif
+        
+        
+#if os(iOS)
+        backgroundColor = .secondarySystemBackground
+#endif
+        
+        for collection in contents.collections {
+            collection.resetControlPoints()
+        }
+        
+        //animateChange()
+    }
+    
+    
+    
+    private func animateChange() {
+        Task {
+            try await Task.sleep(nanoseconds: 1_000_000_000 / 2)
+            //try await Task.sleep(nanoseconds: 350_000_000)
+            
+            
+            @MainActor
+            func randomizeCollection(_ collection: TMCollection) {
+                for group in collection.groups {
+                    for axisIndex in group.axes.indices {
+                        for pointIndex in group.axes[axisIndex].points.indices {
+                            let point = group.axes[axisIndex].points[pointIndex].point
+                            group.axes[axisIndex].points[pointIndex].point = .init(x: point.x, y: .random(in: -1...1))
+                        }
+                        group.axes[axisIndex].resetControlPoints()
+                    }
+                }
+                
+                for child in collection.children {
+                    randomizeCollection(child)
+                }
+            }
+            
+            for collection in contents.collections {
+                randomizeCollection(collection)
+                collection.resetControlPoints()
+                _ = collection.updateLayout(level: 0, yOffset: 0, width: bounds.width, height: axisHeight, animated: true)
+            }
+            
+            animateChange()
+        }
+    }
+    
+    
+    
+    let padding: CGFloat = 20
+    
+    /// Cached `x` component of every `TMCollection` data.
+    private(set) var maxXValue: Float = 0
+    
+    /// Call only on adding/removing points to not nuke performance
+    private func recalculateMaxXValue() {
+        func collect(_ col: TMCollection) -> [Float] {
+            let values = col.groups.flatMap { group in
+                group.axes.flatMap { axis in
+                    axis.points.map { point in
+                        point.point.x
+                    }
+                }
+            }
+            
+            let childValues = col.children.flatMap { col in
+                collect(col)
+            }
+            
+            return values + childValues
+        }
+        maxXValue = contents.collections.flatMap({ collect($0) }).max() ?? 1
+    }
+    
+    var xScale: CGFloat = 64
+
+    
+    //let offset = CGPoint(x: 20, y: bounds.height / 2)
+    var offset: CGPoint {
+        CGPoint(x: padding, y: axisHeight / 2)
+    }
+    
+    func cgPoint(_ point: CMPoint) -> CGPoint {
+        point.makeCGPoint(offset: offset, scaleX: xScale, scaleY: axisHeight / 2)
+    }
+    
+    
+    private var needsCurveUpdate: Bool = true
+    /// Update curves at next layout update
+    func invalidateLayout() {
+        needsCurveUpdate = true
+        setNeedsLayout()
+    }
+    
+    
+    let navigatorWidth: CGFloat = 192
+    
+    private func updateNavigatorLayout() {
+#if os(macOS)
+        let scrollOffset = scrollView.contentView.bounds.origin
+#else
+        let scrollOffset = scrollView.contentOffset
+#endif
+        
+        var curveFrame = navigatorContentView.frame
+        curveFrame.origin.x = -(safeAreaInsets.left - scrollOffset.x)
+        
+        navigatorContentView.frame = curveFrame
+    }
+    
+    
+    public override func updateLayout() {
+        // Update curves if needed
+        if needsCurveUpdate {
+            // Call only on adding/removing points
+            recalculateMaxXValue()
+            //
+            
+            needsCurveUpdate = false
+        }
+        
+        let contentSize = contents.updateLayout(animated: false)
+        //print(contentSize)
+        
+        // Navigator content
+        navigatorContentView.frame = .init(
+            origin: .zero,
+            size: .init(width: navigatorWidth, height: contentSize.height)
+        )
+        updateNavigatorLayout()
+        
+        // Divider
+        navigatorDivider.frame = .init(
+            origin: .init(x: navigatorContentView.frame.maxX - 1, y: 0),
+            size: .init(width: 1, height: navigatorContentView.frame.height)
+        )
+        
+        // Curve content
+        curveContentView.frame = .init(
+            origin: .init(x: navigatorContentView.frame.maxX, y: 0),
+            size: contentSize
+        )
+        
+        // Set scroll view content size
+        let totalWidth = max(navigatorWidth + contentSize.width, bounds.width)
+        contentView.frame = .init(
+            origin: contentView.frame.origin,
+            size: .init(width: totalWidth, height: contentSize.height)
+        )
+        
+        // Scroll view size
+        scrollView.frame = bounds
+        
+#if os(iOS)
+        //scrollView.contentInset = .init(top: 0, left: navigatorWidth, bottom: 0, right: 0)
+        scrollView.scrollsToTop = true
+        scrollView.contentSize = contentView.frame.size
+#endif
+    }
+    
+    
+    override func updateAppearance() {
+#if os(macOS)
+        navigatorContentView.layer?.backgroundColor = PlatformColor.controlBackgroundColor.cgColor
+        //curveContentView.layer?.backgroundColor = PlatformColor.gray.cgColor
+        navigatorDivider.layer?.backgroundColor = PlatformColor.separatorColor.cgColor
+#elseif os(iOS)
+        navigatorContentView.backgroundColor = .secondarySystemBackground
+        //curveContentView.backgroundColor = .gray
+        navigatorDivider.backgroundColor = .separator
+#endif
+    }
+    
+    
+    //public override func scrollWheel(with event: NSEvent) {
+    //    axisHeight += event.scrollingDeltaY * 0.1
+    //    updateCurves()
+    //}
+}
+
+
+// MARK: Scroll view delegate
+
+#if os(macOS)
+
+extension CMTimelineEditor {
+    @objc func scrollContentViewBoundsChange(_ notification: Notification) {
+        updateNavigatorLayout()
+    }
+}
+
+#elseif os(iOS)
+
+extension CMTimelineEditor: UIScrollViewDelegate {
+    public func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        updateNavigatorLayout()
+    }
+}
+
+#endif
 
 
 // MARK: View controller
@@ -727,8 +1078,8 @@ open class PlatformViewController: CMViewController {
 }
 
 
-public class TimelineViewController: PlatformViewController {
-    private let timelineView = CMTimelineView()
+public class TimelineEditorController: PlatformViewController {
+    private let timelineView = CMTimelineEditor()
     
     
     public override func setupLayout() {
@@ -741,32 +1092,32 @@ public class TimelineViewController: PlatformViewController {
 
 #if os(macOS)
 
-public struct TimelineView: NSViewControllerRepresentable {
+public struct TimelineEditor: NSViewControllerRepresentable {
     public init() {
         //
     }
     
-    public func makeNSViewController(context: Context) -> TimelineViewController {
-        return TimelineViewController()
+    public func makeNSViewController(context: Context) -> TimelineEditorController {
+        return TimelineEditorController()
     }
     
-    public func updateNSViewController(_ nsViewController: TimelineViewController, context: Context) {
+    public func updateNSViewController(_ nsViewController: TimelineEditorController, context: Context) {
         //
     }
 }
 
 #else
 
-public struct TimelineView: UIViewControllerRepresentable {
+public struct TimelineEditor: UIViewControllerRepresentable {
     public init() {
         //
     }
     
-    public func makeUIViewController(context: Context) -> TimelineViewController {
-        return TimelineViewController()
+    public func makeUIViewController(context: Context) -> TimelineEditorController {
+        return TimelineEditorController()
     }
     
-    public func updateUIViewController(_ uiViewController: TimelineViewController, context: Context) {
+    public func updateUIViewController(_ uiViewController: TimelineEditorController, context: Context) {
         //
     }
 }
@@ -777,7 +1128,24 @@ public struct TimelineView: UIViewControllerRepresentable {
 // MARK: Preview
 
 @available(macOS 15.0, iOS 18.0, *)
-#Preview {
-    TimelineView()
-        //.background { Color.red }
+#Preview(traits: .fixedLayout(width: 384, height: 768)) {
+#if true
+    TimelineEditor()
+        .ignoresSafeArea()
+        //.frame(height: 1024)
+#else
+    ScrollView {
+        VStack {
+            ForEach(0..<100) { _ in
+                HStack {
+                    Text("Hello")
+                        .padding()
+    
+                    Spacer()
+                }
+            }
+        }
+    }
+#endif
+    
 }
