@@ -1132,7 +1132,7 @@ public class CMTimelineEditor: PlatformView {
     }
     
     
-    override func updateAppearance() {
+    public override func updateAppearance() {
 #if os(macOS)
         navigatorContentView.layer?.backgroundColor = PlatformColor.controlBackgroundColor.cgColor
         //curveContentView.layer?.backgroundColor = PlatformColor.gray.cgColor

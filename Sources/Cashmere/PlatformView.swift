@@ -85,12 +85,12 @@ open class PlatformView: CMView {
     }
     
     /// Override to implement layout change
-    internal func updateAppearanceWithoutAppearanceSettings() {
+    open func updateAppearanceWithoutAppearanceSettings() {
         //
     }
     
     /// Override to implement layout change
-    internal func updateAppearance() {
+    open func updateAppearance() {
         //
     }
     

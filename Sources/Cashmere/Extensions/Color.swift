@@ -8,7 +8,7 @@
 import CMPlatform
 
 
-extension PlatformColor {
+public extension PlatformColor {
     static func dynamic(_ regular: PlatformColor, _ dark: PlatformColor) -> PlatformColor {
 #if os(macOS)
         return PlatformColor(name: nil) { appearance in
@@ -33,7 +33,7 @@ extension PlatformColor {
 }
 
 
-extension PlatformColor {
+public extension PlatformColor {
     static func rgba(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat) -> PlatformColor {
         return .init(red: red, green: green, blue: blue, alpha: alpha)
     }
@@ -69,7 +69,7 @@ extension PlatformColor {
 }
 
 
-extension PlatformColor {
+public extension PlatformColor {
     func darken(by component: CGFloat) -> PlatformColor {
 #if os(macOS)
         if let srgb = self.usingColorSpace(.sRGB) {

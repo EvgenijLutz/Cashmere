@@ -37,7 +37,7 @@ public class CMSplitView: PlatformView {
         //
     }
     
-    override func updateAppearance() {
+    public override func updateAppearance() {
         //
     }
     
