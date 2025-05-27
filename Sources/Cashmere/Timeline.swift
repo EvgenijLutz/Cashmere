@@ -68,6 +68,20 @@ public struct CMPoint: Sendable {
 }
 
 
+public extension CMPoint {
+    init(_ point: CGPoint) {
+        self.init(x: Float(point.x), y: Float(point.y))
+    }
+}
+
+
+public extension CGPoint {
+    init(_ point: CMPoint) {
+        self.init(x: CGFloat(point.x), y: CGFloat(point.y))
+    }
+}
+
+
 public prefix func - (value: CMPoint) -> CMPoint {
     .init(x: -value.x, y: -value.y)
 }

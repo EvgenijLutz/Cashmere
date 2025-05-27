@@ -12,8 +12,11 @@ import CMPlatform
 
 /// An unethical monster of NSView and UIView. It does not bite as long as you use it properly, but if you don't...
 ///
-/// `setupLayout` is called at view's creation time. Override this method to add subviews. `updateLayout` is called then.
-/// `updateLayout` is called when layout needs to be updated. Override this method if you have custom layout that is not managed by autolayout.
+/// The following methods are called at view's creation time:
+/// 1. `setupLayout`
+/// 2. `updateLayout`
+/// 3. `updateAppearanceWithoutAppearanceSettings`
+/// 4. `updateAppearance`
 open class PlatformView: CMView {
     public override init(frame frameRect: PlatformRect) {
         super.init(frame: frameRect)
@@ -35,24 +38,50 @@ open class PlatformView: CMView {
     
     // MARK: Layout changes
     
-    /// Override to implement custom layout initialization.
+    /// Called at view's creation time. Override to implement custom layout initialization.
     open func setupLayout() {
         //
     }
     
-    /// Override to implement layout change
+    /// Called when layout needs to be updated. Override this method if you have custom layout that is not managed by autolayout.
     open func updateLayout() {
         //
+    }
+    
+    
+    /// Used in the `checkIfFrameChanged` function to check if `frame` wasn't changed since last frame check.
+    private var lastFrame: PlatformRect? = nil
+    
+    /// Checks if frame wasn't changed since last frame check.
+    private func checkIfFrameChanged() -> Bool {
+        guard lastFrame != frame else {
+            //print("Frame didn't change")
+            return false
+        }
+        lastFrame = frame
+        return true
     }
     
 #if os(macOS)
     public override func layout() {
         super.layout()
+        
+        // Prevent unnecessary layout updates
+        guard checkIfFrameChanged() else {
+            return
+        }
+        
         updateLayout()
     }
 #elseif os(iOS)
     public override func layoutSubviews() {
         super.layoutSubviews()
+        
+        // Prevent unnecessary layout updates
+        guard checkIfFrameChanged() else {
+            return
+        }
+        
         updateLayout()
     }
 #endif
@@ -84,12 +113,12 @@ open class PlatformView: CMView {
         }
     }
     
-    /// Override to implement layout change
+    /// Override to implement appearance change **without** appearance settings applied.
     open func updateAppearanceWithoutAppearanceSettings() {
         //
     }
     
-    /// Override to implement layout change
+    /// Override to implement appearance change **with** appearance settings applied.
     open func updateAppearance() {
         //
     }
@@ -116,6 +145,7 @@ public extension PlatformView {
         return layer
     }
     
+    
     func withLayer(action: (_ layer: CALayer) -> Void) {
 #if os(macOS)
         if let layer {
@@ -127,6 +157,7 @@ public extension PlatformView {
     }
     
     
+    /// Executes given closure with a context of current appearance.
     func withCurrentAppearance(action: () -> Void) {
 #if os(macOS)
         effectiveAppearance.performAsCurrentDrawingAppearance {
@@ -140,6 +171,7 @@ public extension PlatformView {
     }
     
     
+    /// Executes given closure with a context of current appearance and layer.
     func withCurrentAppearance(action: (_ layer: CALayer) -> Void) {
 #if os(macOS)
         if let layer {
