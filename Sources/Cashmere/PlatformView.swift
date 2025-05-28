@@ -43,6 +43,7 @@ open class PlatformView: CMView {
         //
     }
     
+    
     /// Called when layout needs to be updated. Override this method if you have custom layout that is not managed by autolayout.
     open func updateLayout() {
         //
@@ -54,13 +55,17 @@ open class PlatformView: CMView {
     
     /// Checks if frame wasn't changed since last frame check.
     private func checkIfFrameChanged() -> Bool {
+        // Compare last saved frame with the current frame
         guard lastFrame != frame else {
             //print("Frame didn't change")
             return false
         }
+        
+        // Override last saved frame if it was changed
         lastFrame = frame
         return true
     }
+    
     
 #if os(macOS)
     public override func layout() {
@@ -124,21 +129,21 @@ open class PlatformView: CMView {
     }
     
     
-    // MARK: Overloads
+    // MARK: macOS specific
     
 #if os(macOS)
     public override func updateLayer() {
         callUpdateAppearance()
     }
-#endif
     
-#if os(macOS)
     public override var isFlipped: Bool {
         true
     }
 #endif
 }
 
+
+// MARK: Unify platform specific API
 
 public extension PlatformView {
     var platformLayer: CALayer? {

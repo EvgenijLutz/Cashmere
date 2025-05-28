@@ -21,6 +21,7 @@ public typealias PlatformTableCellView = NSTableCellView
 public typealias PlatformOutlineView = NSOutlineView
 public typealias PlatformRect = NSRect
 public typealias PlatformSize = NSSize
+public typealias PlatformPoint = CGPoint
 public typealias PlatformColor = NSColor
 public typealias PlatformFont = NSFont
 
@@ -40,6 +41,7 @@ public typealias PlatformTableCellView = UITableViewCell
 public typealias PlatformOutlineView = UITableView
 public typealias PlatformRect = CGRect
 public typealias PlatformSize = CGSize
+public typealias PlatformPoint = CGPoint
 public typealias PlatformColor = UIColor
 public typealias PlatformFont = UIFont
 

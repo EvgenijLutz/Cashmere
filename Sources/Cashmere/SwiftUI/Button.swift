@@ -35,4 +35,5 @@ public struct ListButtonStyle: ButtonStyle {
                 .background(configuration.isPressed ? pressedColor : normalColor)
         }
     }
+    
 }
