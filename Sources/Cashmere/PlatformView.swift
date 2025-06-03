@@ -101,7 +101,13 @@ open class PlatformView: CMView {
 #elseif os(iOS)
     private func registerForAppearanceUpdates() {
         if #available(iOS 17.0, *) {
+            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, previousTraitCollection: UITraitCollection) in
+                //print("User interface style changed")
+                self.callUpdateAppearance()
+            }
+            
             registerForTraitChanges([UITraitActiveAppearance.self]) { (self: Self, previousTraitCollection: UITraitCollection) in
+                //print("Active appearance changed")
                 self.callUpdateAppearance()
             }
         } else {

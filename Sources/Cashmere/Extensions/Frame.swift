@@ -16,7 +16,7 @@ public extension PlatformRect {
         let maxX = rects.map(\.maxX).max() ?? 0
         let maxY = rects.map(\.maxY).max() ?? 0
         
-        self.init(x: minX, y: minX, width: maxX - minX, height: maxY - minY)
+        self.init(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
     
     
