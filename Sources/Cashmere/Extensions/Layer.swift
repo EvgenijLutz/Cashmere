@@ -21,6 +21,16 @@ public extension CATransaction {
 
 
 @MainActor
+public func getCurrentUIAnimationDuration() -> TimeInterval {
+#if os(iOS)
+    return UIView.inheritedAnimationDuration
+#else
+    return 0
+#endif
+}
+
+
+@MainActor
 public extension CALayer {
     func setFrameAnimatedIfNeeded(_ targetFrame: CGRect) {
 #if false
@@ -54,7 +64,7 @@ public extension CALayer {
     
     func setPositionAnimatedIfNeeded(_ targetPosition: CGPoint) {
 #if true
-        let duration = UIView.inheritedAnimationDuration
+        let duration = getCurrentUIAnimationDuration()
         guard duration > 0.01 else {
             CATransaction.withoutAnimations {
                 position = targetPosition
@@ -80,7 +90,7 @@ public extension CALayer {
     
     func setBoundsSizeAnimatedIfNeeded(_ targetSize: CGSize) {
 #if true
-        let duration = UIView.inheritedAnimationDuration
+        let duration = getCurrentUIAnimationDuration()
         guard duration > 0.01 else {
             CATransaction.withoutAnimations {
                 bounds.size = targetSize
@@ -105,7 +115,7 @@ public extension CALayer {
     
     
     func setTransformAnimatedIfNeeded(_ targetTransform: CATransform3D) {
-        let duration = UIView.inheritedAnimationDuration
+        let duration = getCurrentUIAnimationDuration()
         guard duration > 0.01 else {
             CATransaction.withoutAnimations {
                 transform = targetTransform
@@ -132,7 +142,7 @@ public extension CALayer {
 public extension CAShapeLayer {
     func setPathAnimatedIfNeeded(_ targetPath: CGPath) {
 #if true
-        let duration = UIView.inheritedAnimationDuration
+        let duration = getCurrentUIAnimationDuration()
         guard duration > 0.01 else {
             path = targetPath
             return
