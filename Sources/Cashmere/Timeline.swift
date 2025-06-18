@@ -47,7 +47,7 @@ public struct CMPoint: Sendable {
             return .init(x: 1, y: 0)
         }
         
-        return .init(x: x / length, y: y / length)
+        return .init(x: x / len, y: y / len)
     }
     
     public static func + (lhs: CMPoint, rhs: CMPoint) -> CMPoint {
