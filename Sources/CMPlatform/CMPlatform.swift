@@ -24,6 +24,7 @@ public typealias PlatformSize = NSSize
 public typealias PlatformPoint = CGPoint
 public typealias PlatformColor = NSColor
 public typealias PlatformFont = NSFont
+public typealias PlatformEdgeInsets = NSEdgeInsets
 
 #elseif os(iOS)
 
@@ -44,5 +45,6 @@ public typealias PlatformSize = CGSize
 public typealias PlatformPoint = CGPoint
 public typealias PlatformColor = UIColor
 public typealias PlatformFont = UIFont
+public typealias PlatformEdgeInsets = UIEdgeInsets
 
 #endif

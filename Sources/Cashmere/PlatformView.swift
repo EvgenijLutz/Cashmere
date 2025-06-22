@@ -8,6 +8,13 @@
 import CMPlatform
 
 
+extension PlatformRect {
+    var compactString: String {
+        "(\(Int(origin.x)), \(Int(origin.y)), \(Int(size.width)), \(Int(size.height)))"
+    }
+}
+
+
 // MARK: - Platform view
 
 /// An unethical monster of NSView and UIView. It does not bite as long as you use it properly, but if you don't...
@@ -20,6 +27,7 @@ import CMPlatform
 open class PlatformView: CMView {
     public override init(frame frameRect: PlatformRect) {
         super.init(frame: frameRect)
+        setWantsLayer()
         setupLayout()
         updateLayout()
         callUpdateAppearance()
@@ -29,6 +37,7 @@ open class PlatformView: CMView {
     
     public required init?(coder: NSCoder) {
         super.init(coder: coder)
+        setWantsLayer()
         setupLayout()
         updateLayout()
         callUpdateAppearance()
@@ -50,20 +59,29 @@ open class PlatformView: CMView {
     }
     
     
+    /// Determines whether layout needs update even though view's frame did not change.
+    private var layoutValid: Bool = false
+    
     /// Used in the `checkIfFrameChanged` function to check if `frame` wasn't changed since last frame check.
     private var lastFrame: PlatformRect? = nil
     
     /// Checks if frame wasn't changed since last frame check.
     private func checkIfFrameChanged() -> Bool {
-        // Compare last saved frame with the current frame
-        guard lastFrame != frame else {
+        // Compare last saved frame with the current frame and check if layout is valid
+        if lastFrame == frame && layoutValid {
             //print("Frame didn't change")
             return false
         }
         
         // Override last saved frame if it was changed
         lastFrame = frame
+        layoutValid = true
         return true
+    }
+    
+    public func forceSetNeedsLayout() {
+        layoutValid = false
+        setNeedsLayout()
     }
     
     
@@ -82,10 +100,16 @@ open class PlatformView: CMView {
     public override func layoutSubviews() {
         super.layoutSubviews()
         
+        //let oldFrame = lastFrame ?? .zero
+        
         // Prevent unnecessary layout updates
         guard checkIfFrameChanged() else {
+            //print("❌ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(UIView.inheritedAnimationDuration)")
             return
         }
+        
+        //print("✅ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(UIView.inheritedAnimationDuration)")
+        //print("Layout ~ \(UIView.inheritedAnimationDuration)")
         
         updateLayout()
     }
@@ -112,6 +136,26 @@ open class PlatformView: CMView {
             }
         } else {
             // Fallback on earlier versions
+        }
+    }
+    
+    open override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        
+        if #available(iOS 17.0, *) {
+            // Do nothing. The logic is handled by the ``registerForAppearanceUpdates`` function
+        } else {
+            let activeAppearanceChanged = {
+                if #available(iOS 14.0, *) {
+                    return traitCollection.activeAppearance != previousTraitCollection?.activeAppearance
+                }
+                
+                return false
+            }()
+            
+            if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle || activeAppearanceChanged {
+                callUpdateAppearance()
+            }
         }
     }
 #endif
