@@ -34,3 +34,10 @@ public extension PlatformRect {
         .init(x: width / 2, y: height / 2)
     }
 }
+
+
+extension PlatformRect {
+    var compactString: String {
+        "(\(Int(origin.x)), \(Int(origin.y)), \(Int(size.width)), \(Int(size.height)))"
+    }
+}

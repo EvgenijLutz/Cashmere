@@ -8,16 +8,11 @@
 import CMPlatform
 
 
-extension PlatformRect {
-    var compactString: String {
-        "(\(Int(origin.x)), \(Int(origin.y)), \(Int(size.width)), \(Int(size.height)))"
-    }
-}
-
-
 // MARK: - Platform view
 
 /// An unethical monster of NSView and UIView. It does not bite as long as you use it properly, but if you don't...
+///
+/// This view is designed to bridge both NSView and UIView interfaces so you don't need to
 ///
 /// The following methods are called at view's creation time:
 /// 1. `setupLayout`
@@ -42,6 +37,13 @@ open class PlatformView: CMView {
         updateLayout()
         callUpdateAppearance()
         registerForAppearanceUpdates()
+    }
+    
+    
+    private func setWantsLayer() {
+#if os(macOS)
+        wantsLayer = true
+#endif
     }
     
     
@@ -118,11 +120,13 @@ open class PlatformView: CMView {
     
     // MARK: Appearance
     
+    
 #if os(macOS)
     private func registerForAppearanceUpdates() {
         // Do nothing on macOS
     }
 #elseif os(iOS)
+    /// Register for appearance updates on iOS 17 and newer. For older versions, appearance changes are handled in the ``traitCollectionDidChange(_:)`` function.
     private func registerForAppearanceUpdates() {
         if #available(iOS 17.0, *) {
             registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, previousTraitCollection: UITraitCollection) in
@@ -134,11 +138,10 @@ open class PlatformView: CMView {
                 //print("Active appearance changed")
                 self.callUpdateAppearance()
             }
-        } else {
-            // Fallback on earlier versions
         }
     }
     
+    /// Respond to appearance updates on iOS 16 and older. For newer versions, appearance changes are handled in the ``registerForAppearanceUpdates()`` function.
     open override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         
@@ -195,7 +198,7 @@ open class PlatformView: CMView {
 
 // MARK: Unify platform specific API
 
-public extension PlatformView {
+public extension CMView {
     var platformLayer: CALayer? {
         return layer
     }
@@ -253,13 +256,6 @@ public extension PlatformView {
 #endif
     
     
-    func setWantsLayer() {
-#if os(macOS)
-        wantsLayer = true
-#endif
-    }
-    
-    
     /// The size that the view naturally takes to fit its contents.
     ///
     /// **intrinsicContentSize** with **alignmentRectInsets** on macOS and **intrinsicContentSize** on iOS
@@ -297,8 +293,8 @@ public extension PlatformView {
             return font.ascender + baselineView.alignmentRectInsets.top
         }
         
-        fatalError("fuck")
-        //return baselineView.totalSize.height
+        //fatalError("fuck")
+        return baselineView.totalSize.height
         //return 0
 #endif
     }

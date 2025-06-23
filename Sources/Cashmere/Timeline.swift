@@ -941,11 +941,8 @@ public class CMTimelineEditor: PlatformView {
     public override func setupLayout() {
         contents = .mock(view: self)
         
-        setWantsLayer()
-        
         
         // Curves
-        contentView.setWantsLayer()
 #if os(macOS)
         scrollView.documentView = contentView
         contentView.postsBoundsChangedNotifications = true
@@ -961,12 +958,10 @@ public class CMTimelineEditor: PlatformView {
         
         
         // Curve content view
-        curveContentView.setWantsLayer()
         contentView.addSubview(curveContentView)
         
         
         // Navigator
-        navigatorContentView.setWantsLayer()
         contentView.addSubview(navigatorContentView)
         
         navigatorContentView.addSubview(navigatorDivider)
