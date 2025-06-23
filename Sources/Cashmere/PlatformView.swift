@@ -8,6 +8,16 @@
 import CMPlatform
 
 
+@MainActor
+fileprivate func getCurrentAnimationDuration() -> TimeInterval {
+#if os(macOS)
+    NSAnimationContext.current.duration
+#else
+    UIView.inheritedAnimationDuration
+#endif
+}
+
+
 // MARK: - Platform view
 
 /// An unethical monster of NSView and UIView. It does not bite as long as you use it properly, but if you don't...
@@ -90,32 +100,29 @@ open class PlatformView: CMView {
 #if os(macOS)
     public override func layout() {
         super.layout()
-        
-        // Prevent unnecessary layout updates
-        guard checkIfFrameChanged() else {
-            return
-        }
-        
-        updateLayout()
+        platformLayoutSubviews()
     }
 #elseif os(iOS)
     public override func layoutSubviews() {
         super.layoutSubviews()
-        
+        platformLayoutSubviews()
+    }
+#endif
+    
+    private func platformLayoutSubviews() {
         //let oldFrame = lastFrame ?? .zero
         
         // Prevent unnecessary layout updates
         guard checkIfFrameChanged() else {
-            //print("❌ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(UIView.inheritedAnimationDuration)")
+            //print("❌ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(getCurrentAnimationDuration())")
             return
         }
         
-        //print("✅ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(UIView.inheritedAnimationDuration)")
+        //print("✅ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(getCurrentAnimationDuration())")
         //print("Layout ~ \(UIView.inheritedAnimationDuration)")
         
         updateLayout()
     }
-#endif
     
     
     // MARK: Appearance
