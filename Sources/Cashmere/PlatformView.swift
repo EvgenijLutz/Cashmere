@@ -205,6 +205,20 @@ open class PlatformView: CMView {
 
 // MARK: Unify platform specific API
 
+
+public extension PlatformView {
+#if os(macOS)
+    func sizeToFit() {
+        setFrameSize(totalSize)
+    }
+    
+    func setNeedsLayout() {
+        needsLayout = true
+    }
+#endif
+}
+
+
 public extension CMView {
     var platformLayer: CALayer? {
         return layer
@@ -250,17 +264,6 @@ public extension CMView {
         }
 #endif
     }
-    
-    
-#if os(macOS)
-    func sizeToFit() {
-        setFrameSize(totalSize)
-    }
-    
-    func setNeedsLayout() {
-        needsLayout = true
-    }
-#endif
     
     
     /// The size that the view naturally takes to fit its contents.

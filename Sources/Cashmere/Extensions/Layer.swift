@@ -70,31 +70,60 @@ public extension CALayer {
 
 @MainActor
 public extension CALayer {
+    func setBoundsAnimatedIfNeeded(_ targetBounds: CGRect) {
+        let animationKey = "bounds key"
+        let duration = getCurrentUIAnimationDuration()
+        guard duration > 0.01 else {
+            CATransaction.withoutAnimations {
+                bounds = targetBounds
+            }
+            return
+        }
+        
+        let animation = CABasicAnimation(keyPath: "bounds")
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        animation.repeatCount = 0
+        //animation.beginTime = beginTime
+        animation.duration = duration
+        animation.fromValue = presentation()?.bounds ?? bounds
+        
+        bounds = targetBounds
+        
+        animation.toValue = targetBounds
+        add(animation, forKey: animationKey)
+    }
+    
+    
     func setFrameAnimatedIfNeeded(_ targetFrame: CGRect) {
 #if false
-        let duration = UIView.inheritedAnimationDuration
+        let animationKey = "frame key"
+        let duration = getCurrentUIAnimationDuration()
         guard duration > 0.01 else {
-            frame = targetFrame
+            CATransaction.withoutAnimations {
+                frame = targetFrame
+            }
             return
         }
         
         let animation = CABasicAnimation(keyPath: "frame")
         animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         animation.repeatCount = 0
+        //animation.beginTime = beginTime
         animation.duration = duration
         animation.fromValue = presentation()?.frame ?? frame
         
         frame = targetFrame
         
-        animation.toValue = frame
-        add(animation, forKey: "frame key")
+        animation.toValue = targetFrame
+        add(animation, forKey: animationKey)
 #else
         //frame = targetframe
         //setPositionAnimatedIfNeeded(targetFrame.origin)
         setPositionAnimatedIfNeeded(.init(
-            x: targetFrame.origin.x + targetFrame.size.width / 2,
-            y: targetFrame.origin.y + targetFrame.size.height / 2
+            x: targetFrame.origin.x + targetFrame.size.width * anchorPoint.x,
+            y: targetFrame.origin.y + targetFrame.size.height * anchorPoint.y
         ))
+        
         setBoundsSizeAnimatedIfNeeded(targetFrame.size)
 #endif
     }
@@ -120,7 +149,7 @@ public extension CALayer {
         
         contentsRect = targetContentsRect
         
-        animation.toValue = contentsRect
+        animation.toValue = targetContentsRect
         //removeAnimation(forKey: animationKey)
         add(animation, forKey: animationKey)
     }
@@ -154,7 +183,7 @@ public extension CALayer {
         
         position = targetPosition
         
-        animation.toValue = position
+        animation.toValue = targetPosition
         //removeAnimation(forKey: animationKey)
         add(animation, forKey: animationKey)
 #else
@@ -191,7 +220,7 @@ public extension CALayer {
         
         bounds.size = targetSize
         
-        animation.toValue = bounds.size
+        animation.toValue = targetSize
         //removeAnimation(forKey: animationKey)
         add(animation, forKey: animationKey)
 #else
