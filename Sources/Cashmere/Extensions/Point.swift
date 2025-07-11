@@ -9,6 +9,10 @@ import CMPlatform
 
 
 public extension PlatformPoint {
+    var length: CGFloat {
+        sqrt(x * x + y * y)
+    }
+    
     func inverted() -> PlatformPoint {
         .init(x: -x, y: -y)
     }
@@ -17,4 +21,8 @@ public extension PlatformPoint {
 
 public func + (lhs: PlatformPoint, rhs: PlatformPoint) -> PlatformPoint {
     .init(x: lhs.x + rhs.x, y: lhs.y + rhs.y)
+}
+
+public func - (lhs: PlatformPoint, rhs: PlatformPoint) -> PlatformPoint {
+    .init(x: lhs.x - rhs.x, y: lhs.y - rhs.y)
 }
