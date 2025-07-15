@@ -28,6 +28,10 @@ class PageSliderView: PlatformView {
     private let testView = PlatformView()
 #endif
     
+    
+    fileprivate var currentViewController: PageInfoProvider?
+    
+    
     override func setupLayout() {
 #if os(iOS)
         panGestureRecognizer.minimumNumberOfTouches = 1
@@ -39,6 +43,7 @@ class PageSliderView: PlatformView {
         testView.backgroundColor = .red.withAlphaComponent(0.05)
         testView.frame = .init(x: 0, y: 0, width: 140, height: 140)
         testView.layer.cornerRadius = 70
+        testView.alpha = 0
         addSubview(testView)
 #endif
         //
@@ -80,8 +85,61 @@ extension PageSliderView {
             if speed > 0.1 {
                 dragRecords.append(.init(time: now, velocity: velocity))
             }
+            
+            if let startLocation, let currentViewController {
+                let contents = currentViewController.pageContents
+                let numContents = contents.count
+                if numContents > 0 {
+                    let delta = location - startLocation
+                    let distanceThreshold = frame.height / 3
+                    
+                    for (index, content) in contents.enumerated() {
+                        let currentIndex: Int
+                        if delta.y < 0 {
+                            currentIndex = index
+                        }
+                        else {
+                            currentIndex = numContents - 1 - index
+                        }
+                        
+                        let weightSpeed: CGFloat = 1.0
+                        let influence: CGFloat = 0.3
+                        let weight: CGFloat = (1 * weightSpeed) / (1 + CGFloat(currentIndex) * influence)
+                        
+                        
+                        let yDistance: CGFloat = {
+                            let value = delta.y * weight
+                            if value > 0 {
+                                return min(distanceThreshold, value)
+                            }
+                            else {
+                                return max(-distanceThreshold, value)
+                            }
+                        }()
+                        let progress: CGFloat = min(1, 1 / distanceThreshold * abs(yDistance))
+                        
+                        content.transform = .init(translationX: 0, y: distanceThreshold * progress * (delta.y > 0 ? 1 : -1))
+                        content.alpha = max(0, 1 - progress)
+                    }
+                    
+                    //currentViewController.view.frame = bounds
+                    
+                    
+                    
+                }
+            }
         }
         else if state == .ended {
+            if let currentViewController {
+                let contents = currentViewController.pageContents
+                UIView.animate(withDuration: 0.25, delay: 0, options: .curveEaseOut) {
+                    for content in contents {
+                        content.transform = .identity
+                        content.alpha = 1
+                    }
+                }
+            }
+            
             // Calculate velocity
             var accumulatedVelocity: CGPoint = .zero
             for record in dragRecords {
@@ -123,6 +181,20 @@ public class PageSliderViewController: PlatformViewController {
     
     public override func setupLayout() {
         view = pageSliderView
+        
+        
+        do {
+            let testScreen1 = TestScreen2()
+            
+            addChild(testScreen1)
+            view.addSubview(testScreen1.view)
+            testScreen1.didMove(toParent: self)
+            
+            testScreen1.view.frame = view.bounds
+            //print(testScreen1.view.frame)
+            
+            pageSliderView.currentViewController = testScreen1
+        }
     }
 }
 
@@ -140,6 +212,23 @@ public struct PageSlider: UIViewControllerRepresentable {
     }
     
     public func updateUIViewController(_ uiViewController: PageSliderViewController, context: Context) {
+        //
+    }
+}
+
+#elseif os(macOS)
+
+public struct PageSlider: NSViewControllerRepresentable {
+    public init() {
+        //
+    }
+    
+    public func makeNSViewController(context: Context) -> PageSliderViewController {
+        let vc = PageSliderViewController()
+        return vc
+    }
+    
+    public func updateNSViewController(_ nsViewController: PageSliderViewController, context: Context) {
         //
     }
 }
@@ -239,7 +328,7 @@ class TestScreen2: PlatformViewController, PageInfoProvider {
         position.y += label1.frame.height / 2
         
         // Label 2
-        label2.frame.size = label2.sizeThatFits(.init(width: view.frame.width - 40, height: 1000))
+        label2.bounds.size = label2.sizeThatFits(.init(width: view.frame.width - 40, height: 1000))
         position.y += label2.frame.height / 2 + spacing
         label2.center = position
         position.y += label2.frame.height / 2
@@ -254,7 +343,8 @@ class TestScreen2: PlatformViewController, PageInfoProvider {
 
 @available(iOS 17.0, *)
 #Preview {
-    TestScreen1()
+    //TestScreen1()
     //TestScreen2()
-    //PageSliderView()
+    
+    PageSlider()
 }
