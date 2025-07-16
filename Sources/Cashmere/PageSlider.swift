@@ -21,6 +21,7 @@ public protocol PageSliderDelegate: AnyObject {
 
 
 class PageSliderView: PlatformView {
+    weak var owner: PageSliderViewController!
 #if os(iOS)
     private let panGestureRecognizer = UIPanGestureRecognizer()
     private let panDynamicAnimator = UIDynamicAnimator()
@@ -29,7 +30,38 @@ class PageSliderView: PlatformView {
 #endif
     
     
-    fileprivate var currentViewController: PageInfoProvider?
+    public var pages: [PageInfoProvider] = [] {
+        didSet {
+            setCurrentPage(pages.first)
+        }
+    }
+    private var currentViewController: PageInfoProvider?
+    
+    private func setCurrentPage(_ page: PageInfoProvider?) {
+        // Remove old controller
+        if let currentViewController {
+            // Reset state of every element
+            let elements = currentViewController.pageContents
+            for element in elements {
+                element.transform = .identity
+                element.alpha = 1
+            }
+            
+            currentViewController.willMove(toParent: nil)
+            currentViewController.view.removeFromSuperview()
+            currentViewController.removeFromParent()
+        }
+        
+        // Add new controller
+        currentViewController = page
+        if let currentViewController {
+            owner.addChild(currentViewController)
+            addSubview(currentViewController.view)
+            currentViewController.didMove(toParent: owner)
+            
+            currentViewController.view.frame = bounds
+        }
+    }
     
     
     override func setupLayout() {
@@ -75,6 +107,8 @@ extension PageSliderView {
         let now = CACurrentMediaTime()
         dragRecords.removeAll { now - $0.time > recordThreshold }
         
+        let distanceThreshold = frame.height / 3
+        
         testView.center = location
         if state == .began {
             startLocation = location
@@ -91,7 +125,6 @@ extension PageSliderView {
                 let numContents = contents.count
                 if numContents > 0 {
                     let delta = location - startLocation
-                    let distanceThreshold = frame.height / 3
                     
                     for (index, content) in contents.enumerated() {
                         let currentIndex: Int
@@ -162,6 +195,14 @@ extension PageSliderView {
             let curveIntegral: CGFloat = 0.75 // For easeOutCubic
             let distance = speed * duration * curveIntegral
             
+            // TODO: It's a wrong distance
+            if distance > (distanceThreshold * 2 / 3) {
+                if let itemIndex = pages.firstIndex(where: { $0 === currentViewController }) {
+                    let nextIndex = (itemIndex + 1) % pages.count
+                    setCurrentPage(pages[nextIndex])
+                }
+            }
+            
             UIView.animate(withDuration: duration, delay: 0, options: .curveEaseOut) {
                 let center = self.testView.center
                 self.testView.center = center + direction * distance
@@ -180,21 +221,15 @@ public class PageSliderViewController: PlatformViewController {
     let pageSliderView = PageSliderView()
     
     public override func setupLayout() {
+        pageSliderView.owner = self
         view = pageSliderView
         
+        pageSliderView.pages = {
+            let testScreen1 = TestScreen1()
+            let testScreen2 = TestScreen2()
+            return [testScreen1, testScreen2]
+        }()
         
-        do {
-            let testScreen1 = TestScreen2()
-            
-            addChild(testScreen1)
-            view.addSubview(testScreen1.view)
-            testScreen1.didMove(toParent: self)
-            
-            testScreen1.view.frame = view.bounds
-            //print(testScreen1.view.frame)
-            
-            pageSliderView.currentViewController = testScreen1
-        }
     }
 }
 
@@ -237,7 +272,7 @@ public struct PageSlider: NSViewControllerRepresentable {
 
 
 @MainActor
-func makeLabel(_ text: String, _ size: CGFloat = 32) -> UILabel {
+func makeLabel(_ text: String, _ size: CGFloat = 32) -> CMView {
     let label1 = UILabel()
     
     label1.numberOfLines = 0
