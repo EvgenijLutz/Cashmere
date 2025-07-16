@@ -163,15 +163,13 @@ extension PageSliderView {
             }
         }
         else if state == .ended {
-            if let currentViewController {
-                let contents = currentViewController.pageContents
-                UIView.animate(withDuration: 0.25, delay: 0, options: .curveEaseOut) {
-                    for content in contents {
-                        content.transform = .identity
-                        content.alpha = 1
-                    }
+            let totalDistance: CGFloat = {
+                guard let startLocation else {
+                    return 0
                 }
-            }
+                
+                return (location - startLocation).y
+            }()
             
             // Calculate velocity
             var accumulatedVelocity: CGPoint = .zero
@@ -182,30 +180,56 @@ extension PageSliderView {
             }
             accumulatedVelocity = accumulatedVelocity / CGFloat(dragRecords.count)
             
-            // Check if we can
+            // Animate the bubble
             let speed = accumulatedVelocity.length
-            guard speed > 0.1 else {
-                return
-            }
-            
-            let duration: CGFloat = 0.35
-            //let duration: CGFloat = (frame.height - abs(location.y - (startLocation?.y ?? 0))) / speed
-            
-            let direction = accumulatedVelocity.normalized()
-            let curveIntegral: CGFloat = 0.75 // For easeOutCubic
-            let distance = speed * duration * curveIntegral
-            
-            // TODO: It's a wrong distance
-            if distance > (distanceThreshold * 2 / 3) {
-                if let itemIndex = pages.firstIndex(where: { $0 === currentViewController }) {
-                    let nextIndex = (itemIndex + 1) % pages.count
-                    setCurrentPage(pages[nextIndex])
+            if speed > 0 {
+                let direction = accumulatedVelocity.normalized()
+                let curveIntegral: CGFloat = 0.75 // For easeOutCubic
+                let duration: CGFloat = 0.35
+                //let duration: CGFloat = (frame.height - abs(location.y - (startLocation?.y ?? 0))) / speed
+                let distance = speed * duration * curveIntegral
+                UIView.animate(withDuration: duration, delay: 0, options: .curveEaseOut) {
+                    let center = self.testView.center
+                    self.testView.center = center + direction * distance
                 }
             }
             
-            UIView.animate(withDuration: duration, delay: 0, options: .curveEaseOut) {
-                let center = self.testView.center
-                self.testView.center = center + direction * distance
+            
+            let outOfMinimalThreshold = abs(totalDistance) > (distanceThreshold)
+            //print("\(totalDistance) -> \(distanceThreshold)")
+            let fastEnoughToSwipe = abs(totalDistance) > (distanceThreshold * 1 / 4) && speed > 300
+            if outOfMinimalThreshold || fastEnoughToSwipe {
+                if let itemIndex = pages.firstIndex(where: { $0 === currentViewController }) {
+                    let nextIndex = (itemIndex + 1) % pages.count
+                    
+                    if let currentViewController {
+                        let contents = currentViewController.pageContents
+                        UIView.animate(withDuration: 0.15, delay: 0, options: .curveEaseOut) {
+                            for content in contents {
+                                //content.transform = .identity
+                                //content.alpha = 1
+                                
+                                content.transform = .init(translationX: 0, y: distanceThreshold * (totalDistance > 0 ? 1 : -1))
+                                content.alpha = 0
+                            }
+                        } completion: { finished in
+                            self.setCurrentPage(self.pages[nextIndex])
+                        }
+                    }
+                }
+            }
+            else {
+                if let currentViewController {
+                    let contents = currentViewController.pageContents
+                    UIView.animate(withDuration: 0.15, delay: 0, options: .curveEaseOut) {
+                        for content in contents {
+                            content.transform = .identity
+                            content.alpha = 1
+                        }
+                    } completion: { finished in
+                        //
+                    }
+                }
             }
             
             // Drop all records
