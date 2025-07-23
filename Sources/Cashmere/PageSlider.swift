@@ -60,6 +60,12 @@ class PageSliderView: PlatformView {
             currentViewController.didMove(toParent: owner)
             
             currentViewController.view.frame = bounds
+            
+            
+            currentViewController.view.alpha = 0
+            UIView.animate(withDuration: 0.25) {
+                currentViewController.view.alpha = 1
+            }
         }
     }
     
@@ -107,7 +113,10 @@ extension PageSliderView {
         let now = CACurrentMediaTime()
         dragRecords.removeAll { now - $0.time > recordThreshold }
         
-        let distanceThreshold = frame.height / 3
+        let distanceThreshold = frame.height / 2
+        
+        let weightSpeed: CGFloat = 1.0
+        let influence: CGFloat = 0.3
         
         testView.center = location
         if state == .began {
@@ -135,8 +144,6 @@ extension PageSliderView {
                             currentIndex = numContents - 1 - index
                         }
                         
-                        let weightSpeed: CGFloat = 1.0
-                        let influence: CGFloat = 0.3
                         let weight: CGFloat = (1 * weightSpeed) / (1 + CGFloat(currentIndex) * influence)
                         
                         
@@ -156,20 +163,20 @@ extension PageSliderView {
                     }
                     
                     //currentViewController.view.frame = bounds
-                    
-                    
-                    
                 }
             }
         }
         else if state == .ended {
-            let totalDistance: CGFloat = {
+            let delta: CGPoint = {
                 guard let startLocation else {
-                    return 0
+                    return .zero
                 }
                 
-                return (location - startLocation).y
+                return (location - startLocation)
             }()
+            let deltaSign = delta.y >= 0
+            
+            let totalDistance = delta.y
             
             // Calculate velocity
             var accumulatedVelocity: CGPoint = .zero
@@ -181,6 +188,7 @@ extension PageSliderView {
             accumulatedVelocity = accumulatedVelocity / CGFloat(dragRecords.count)
             
             // Animate the bubble
+            //let speed = accumulatedVelocity.y
             let speed = accumulatedVelocity.length
             if speed > 0 {
                 let direction = accumulatedVelocity.normalized()
@@ -197,19 +205,37 @@ extension PageSliderView {
             
             let outOfMinimalThreshold = abs(totalDistance) > (distanceThreshold)
             //print("\(totalDistance) -> \(distanceThreshold)")
-            let fastEnoughToSwipe = abs(totalDistance) > (distanceThreshold * 1 / 4) && speed > 300
+            let fastEnoughToSwipe = abs(totalDistance) > (distanceThreshold * 1 / 8) && speed > 300
             if outOfMinimalThreshold || fastEnoughToSwipe {
                 if let itemIndex = pages.firstIndex(where: { $0 === currentViewController }) {
                     let nextIndex = (itemIndex + 1) % pages.count
                     
+                    let curveIntegral: CGFloat = 0.75 // For easeOutCubic
+                    let duration: CGFloat = 0.25
+                    //let duration: CGFloat = (frame.height - abs(location.y - (startLocation?.y ?? 0))) / speed
+                    let distance = speed * duration * curveIntegral
+                    
                     if let currentViewController {
                         let contents = currentViewController.pageContents
-                        UIView.animate(withDuration: 0.15, delay: 0, options: .curveEaseOut) {
-                            for content in contents {
+                        UIView.animate(withDuration: duration, delay: 0, options: .curveEaseOut) {
+                            let numContents = contents.count
+                            for (index, content) in contents.enumerated() {
+                                let currentIndex: Int
+                                if accumulatedVelocity.y < 0 {
+                                    currentIndex = index
+                                }
+                                else {
+                                    currentIndex = numContents - 1 - index
+                                }
+                                let weight: CGFloat = (1 * weightSpeed) / (1 + CGFloat(currentIndex) * influence)
+                                
                                 //content.transform = .identity
                                 //content.alpha = 1
                                 
-                                content.transform = .init(translationX: 0, y: distanceThreshold * (totalDistance > 0 ? 1 : -1))
+                                //content.transform = .init(translationX: 0, y: distanceThreshold * (totalDistance > 0 ? 1 : -1))
+                                //content.transform = .init(translationX: 0, y: totalDistance + (totalDistance > 0 ? 1 : -1) * speed * 0.25)
+                                //content.transform = .init(translationX: 0, y: totalDistance + (totalDistance > 0 ? 1 : -1) * distance * weight)
+                                content.transform = .init(translationX: 0, y: distanceThreshold * (totalDistance > 0 ? 1 : -1) * weight)
                                 content.alpha = 0
                             }
                         } completion: { finished in
