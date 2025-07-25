@@ -236,7 +236,7 @@ extension PageSliderView {
                                 //content.transform = .init(translationX: 0, y: totalDistance + (totalDistance > 0 ? 1 : -1) * speed * 0.25)
                                 //content.transform = .init(translationX: 0, y: totalDistance + (totalDistance > 0 ? 1 : -1) * distance * weight)
                                 content.transform = .init(translationX: 0, y: distanceThreshold * (totalDistance > 0 ? 1 : -1) * weight)
-                                content.alpha = 0
+                                //content.alpha = 0
                             }
                         } completion: { finished in
                             self.setCurrentPage(self.pages[nextIndex])
