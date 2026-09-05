@@ -18,7 +18,6 @@ fileprivate let enableTagViewLogging = true
 
 #if false
 
-@available(iOS 14.0, *)
 fileprivate let logger = Logger(subsystem: "Cashmere", category: "TagView")
 
 fileprivate func log(_ message: String) {
@@ -26,12 +25,7 @@ fileprivate func log(_ message: String) {
         return
     }
     
-    if #available(iOS 14.0, *) {
-        logger.log("\(message)")
-    }
-    else {
-        print(message)
-    }
+    logger.log("\(message)")
 }
 
 #else
@@ -553,60 +547,8 @@ public struct TagView<Item: Identifiable, V: View>: UIViewControllerRepresentabl
     
     
     // TODO: On iOS 13-15 the view takes all vertical space
-    @available(iOS 16, *)
     public func sizeThatFits(_ proposal: ProposedViewSize, uiViewController: CMTagViewController, context: Context) -> CGSize? {
         let fittingSize = uiViewController.tagView.calculateSizeThatFits(proposedWidth: proposal.width, proposedHeight: proposal.height)
-        
-        log("SwiftUI request size that fits in (\(floatString(proposal.width)) x \(floatString(proposal.height))) - result (\(floatString(fittingSize.width)) x \(floatString(fittingSize.height)))")
-        
-        return fittingSize
-    }
-}
-
-
-@available(*, deprecated, message: "Use TagView instead")
-public struct OldTagView<Item: Identifiable, V: View>: UIViewRepresentable {
-    private let items: [Item]
-    private let viewGenerator: (Item) -> V
-    
-    
-    public init(_ items: [Item], viewGenerator: @escaping (Item) -> V) {
-        //log("Init OldTagView")
-        self.items = items
-        self.viewGenerator = viewGenerator
-    }
-    
-    
-    public func makeUIView(context: Context) -> CMTagView {
-        log("Make UIView")
-        let tagView = CMTagView()
-        return tagView
-    }
-    
-    
-    public func updateUIView(_ uiView: CMTagView, context: Context) {
-        log("Update view with \(items.count) items")
-        
-        uiView.updateContent(items, animated: context.transaction.animation != nil) { item in
-            let swiftUIView = viewGenerator(item)
-            let hostingVC = UIHostingController(rootView: swiftUIView)
-            
-            // A very dangereous move
-            let view = hostingVC.view!
-            
-            //if #available(iOS 16, *) {
-            //    hostingVC.sizingOptions = .intrinsicContentSize
-            //}
-            
-            // TODO: Don't drop the view controller: https://medium.com/arcush-tech/two-pitfalls-to-avoid-when-working-with-uihostingcontroller-534d1507563e
-            return .init(view: view, viewController: hostingVC)
-        }
-    }
-    
-    
-    @available(iOS 16, *)
-    public func sizeThatFits(_ proposal: ProposedViewSize, uiView: CMTagView, context: Context) -> CGSize? {
-        let fittingSize = uiView.calculateSizeThatFits(proposedWidth: proposal.width, proposedHeight: proposal.height)
         
         log("SwiftUI request size that fits in (\(floatString(proposal.width)) x \(floatString(proposal.height))) - result (\(floatString(fittingSize.width)) x \(floatString(fittingSize.height)))")
         
@@ -623,38 +565,6 @@ struct TestItem: Identifiable {
 }
 
 
-@available(iOS 18, *)
-@Observable class TestViewModel {
-    var items: [TestItem] = [
-        .init(name: "First"),
-        .init(name: "Second"),
-        .init(name: "Third"),
-        .init(name: "Fourth"),
-        .init(name: "Fifth"),
-        .init(name: "Sixth"),
-        .init(name: "Seventh"),
-        .init(name: "Eighth"),
-        .init(name: "Ninth"),
-        .init(name: "Tenth"),
-        .init(name: "Eleventh"),
-        .init(name: "Twelfth"),
-        .init(name: "Thirteenth"),
-        .init(name: "Fourteenth"),
-        .init(name: "Fifteenth"),
-        .init(name: "Sixteenth"),
-        .init(name: "Seventeenth"),
-        .init(name: "Eighteenth"),
-        .init(name: "Nineteenth"),
-        .init(name: "Twentieth")
-    ]
-    
-    func removeItem(with id: TestItem.ID) {
-        items.removeAll { $0.id == id }
-    }
-}
-
-
-@available(iOS 18, *)
 struct TestTagView: View {
     @State var on: Bool = false
     var title: String
@@ -685,16 +595,40 @@ struct TestTagView: View {
 }
 
 
-@available(iOS 18, *)
 struct TagTestView: View {
-    private var viewModel = TestViewModel()
+    @State private var items: [TestItem] = [
+        .init(name: "First"),
+        .init(name: "Second"),
+        .init(name: "Third"),
+        .init(name: "Fourth"),
+        .init(name: "Fifth"),
+        .init(name: "Sixth"),
+        .init(name: "Seventh"),
+        .init(name: "Eighth"),
+        .init(name: "Ninth"),
+        .init(name: "Tenth"),
+        .init(name: "Eleventh"),
+        .init(name: "Twelfth"),
+        .init(name: "Thirteenth"),
+        .init(name: "Fourteenth"),
+        .init(name: "Fifteenth"),
+        .init(name: "Sixteenth"),
+        .init(name: "Seventeenth"),
+        .init(name: "Eighteenth"),
+        .init(name: "Nineteenth"),
+        .init(name: "Twentieth")
+    ]
+    
+    func removeItem(with id: TestItem.ID) {
+        items.removeAll { $0.id == id }
+    }
     
     var body: some View {
         VStack {
             //HStack {
-                TagView(viewModel.items) { item in
+                TagView(items) { item in
                     TestTagView(title: item.name) {
-                        viewModel.removeItem(with: item.id)
+                        removeItem(with: item.id)
                     }
                 }
                 //.background(.gray)
@@ -706,7 +640,7 @@ struct TagTestView: View {
             
             Button("Add tag") {
                 withAnimation {
-                    viewModel.items.append(.init(name: "tag #\(viewModel.items.count)"))
+                    items.append(.init(name: "tag #\(items.count)"))
                 }
             }
             .buttonStyle(.borderedProminent)
@@ -716,7 +650,6 @@ struct TagTestView: View {
 }
 
 
-@available(iOS 18, *)
 #Preview {
     TagTestView()
 }

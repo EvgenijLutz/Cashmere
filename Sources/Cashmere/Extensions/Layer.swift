@@ -25,6 +25,11 @@ public func getCurrentUIAnimationDuration() -> TimeInterval {
 #if os(iOS)
     return UIView.inheritedAnimationDuration
 #else
+    // TODO: isPerformingAnimation is actially private. Move it then to PlatformView?
+    if CMView.isPerformingAnimation {
+        return NSAnimationContext.current.duration
+    }
+    
     return 0
 #endif
 }

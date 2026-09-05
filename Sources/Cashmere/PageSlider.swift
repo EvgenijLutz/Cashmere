@@ -5,6 +5,8 @@
 //  Created by Evgenij Lutz on 10.07.25.
 //
 
+#if os(iOS)
+
 import CMPlatform
 import SwiftUI
 
@@ -174,7 +176,7 @@ extension PageSliderView {
                 
                 return (location - startLocation)
             }()
-            let deltaSign = delta.y >= 0
+            //let deltaSign = delta.y >= 0
             
             let totalDistance = delta.y
             
@@ -210,10 +212,10 @@ extension PageSliderView {
                 if let itemIndex = pages.firstIndex(where: { $0 === currentViewController }) {
                     let nextIndex = (itemIndex + 1) % pages.count
                     
-                    let curveIntegral: CGFloat = 0.75 // For easeOutCubic
+                    //let curveIntegral: CGFloat = 0.75 // For easeOutCubic
                     let duration: CGFloat = 0.25
                     //let duration: CGFloat = (frame.height - abs(location.y - (startLocation?.y ?? 0))) / speed
-                    let distance = speed * duration * curveIntegral
+                    //let distance = speed * duration * curveIntegral
                     
                     if let currentViewController {
                         let contents = currentViewController.pageContents
@@ -433,3 +435,5 @@ class TestScreen2: PlatformViewController, PageInfoProvider {
     
     PageSlider()
 }
+
+#endif

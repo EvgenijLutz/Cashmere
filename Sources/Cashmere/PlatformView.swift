@@ -6,6 +6,7 @@
 //
 
 import CMPlatform
+import SwiftUI
 
 
 @MainActor
@@ -16,6 +17,16 @@ fileprivate func getCurrentAnimationDuration() -> TimeInterval {
     UIView.inheritedAnimationDuration
 #endif
 }
+
+
+// The PlatformEdgeInsets struct on iOS conforms to the Equatable protocol, but on macOS it does not, so implement it here
+#if os(macOS)
+extension PlatformEdgeInsets: @retroactive Equatable {
+    public static func == (lhs: PlatformEdgeInsets, rhs: PlatformEdgeInsets) -> Bool {
+        lhs.left == rhs.left && lhs.top == rhs.top && lhs.right == rhs.right && lhs.bottom == rhs.bottom
+    }
+}
+#endif
 
 
 // MARK: - Platform view
@@ -71,22 +82,26 @@ open class PlatformView: CMView {
     }
     
     
-    /// Determines whether layout needs update even though view's frame did not change.
+    /// Determines whether layout needs update even though view's frame did not change - used in the ``checkIfFrameChanged`` function.
     private var layoutValid: Bool = false
     
     /// Used in the `checkIfFrameChanged` function to check if `frame` wasn't changed since last frame check.
     private var lastFrame: PlatformRect? = nil
+    private var lastSafeAreaRect: PlatformEdgeInsets? = nil
     
     /// Checks if frame wasn't changed since last frame check.
     private func checkIfFrameChanged() -> Bool {
+        let currentFrame = frame
+        let currentInsets = safeAreaInsets
+        
         // Compare last saved frame with the current frame and check if layout is valid
-        if lastFrame == frame && layoutValid {
-            //print("Frame didn't change")
+        if lastFrame == currentFrame && lastSafeAreaRect == currentInsets && layoutValid {
             return false
         }
         
         // Override last saved frame if it was changed
-        lastFrame = frame
+        lastFrame = currentFrame
+        lastSafeAreaRect = currentInsets
         layoutValid = true
         return true
     }
@@ -110,16 +125,10 @@ open class PlatformView: CMView {
 #endif
     
     private func platformLayoutSubviews() {
-        //let oldFrame = lastFrame ?? .zero
-        
         // Prevent unnecessary layout updates
         guard checkIfFrameChanged() else {
-            //print("❌ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(getCurrentAnimationDuration())")
             return
         }
-        
-        //print("✅ \(oldFrame.compactString) -> \(frame.compactString) ~ \(safeAreaInsets.top) ° \(getCurrentAnimationDuration())")
-        //print("Layout ~ \(UIView.inheritedAnimationDuration)")
         
         updateLayout()
     }
@@ -127,14 +136,11 @@ open class PlatformView: CMView {
     
     // MARK: Appearance
     
-    
+    /// Register for appearance updates.
+    private func registerForAppearanceUpdates() {
 #if os(macOS)
-    private func registerForAppearanceUpdates() {
         // Do nothing on macOS
-    }
 #elseif os(iOS)
-    /// Register for appearance updates on iOS 17 and newer. For older versions, appearance changes are handled in the ``traitCollectionDidChange(_:)`` function.
-    private func registerForAppearanceUpdates() {
         if #available(iOS 17.0, *) {
             registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, previousTraitCollection: UITraitCollection) in
                 //print("User interface style changed")
@@ -146,29 +152,9 @@ open class PlatformView: CMView {
                 self.callUpdateAppearance()
             }
         }
+#endif
     }
     
-    /// Respond to appearance updates on iOS 16 and older. For newer versions, appearance changes are handled in the ``registerForAppearanceUpdates()`` function.
-    open override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        
-        if #available(iOS 17.0, *) {
-            // Do nothing. The logic is handled by the ``registerForAppearanceUpdates`` function
-        } else {
-            let activeAppearanceChanged = {
-                if #available(iOS 14.0, *) {
-                    return traitCollection.activeAppearance != previousTraitCollection?.activeAppearance
-                }
-                
-                return false
-            }()
-            
-            if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle || activeAppearanceChanged {
-                callUpdateAppearance()
-            }
-        }
-    }
-#endif
     
     private func callUpdateAppearance() {
         updateAppearanceWithoutAppearanceSettings()
@@ -178,10 +164,12 @@ open class PlatformView: CMView {
         }
     }
     
+    
     /// Override to implement appearance change **without** appearance settings applied.
     open func updateAppearanceWithoutAppearanceSettings() {
         //
     }
+    
     
     /// Override to implement appearance change **with** appearance settings applied.
     open func updateAppearance() {
@@ -308,4 +296,51 @@ public extension CMView {
         //return 0
 #endif
     }
+}
+
+
+public extension CMView {
+    @MainActor
+    // TODO: not fileprivate because getCurrentUIAnimationDuration uses it
+    /*fileprivate*/ static var isPerformingAnimation = false
+    
+    var cmAnimatable: Self {
+#if os(macOS)
+        if Self.isPerformingAnimation {
+            return self.animator()
+        }
+#endif
+        
+        return self
+    }
+    
+    func performAnimation(_ animation: SwiftUI.Animation, _ changes: @MainActor @escaping () -> Void) {
+        #if os(macOS)
+        NSAnimationContext.runAnimationGroup { context in
+            let oldIsAnimating = CMView.isPerformingAnimation
+            CMView.isPerformingAnimation = true
+            context.duration = 0.35
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            changes()
+            CMView.isPerformingAnimation = oldIsAnimating
+        }
+        #else
+        UIView.animate(withDuration: 0.35) {
+            let oldIsAnimating = CMView.isPerformingAnimation
+            CMView.isPerformingAnimation = true
+            changes()
+            CMView.isPerformingAnimation = oldIsAnimating
+        }
+        #endif
+    }
+    
+    func withOrWithoutAnimation(_ animate: Bool, _ animation: SwiftUI.Animation, _ changes: @MainActor @escaping () -> Void) {
+        if animate {
+            performAnimation(animation, changes)
+        }
+        else {
+            changes()
+        }
+    }
+    
 }

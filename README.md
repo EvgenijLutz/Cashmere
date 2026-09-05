@@ -5,7 +5,7 @@ Because it's cozy here.
 
 ## TagView for SwiftUI and UIKit
 
-**TagView** is a lightweight and customizable view for creating tag-like layouts in SwiftUI, powered by the maturity and flexibility of UIKit. It provides smooth animations, excellent performance, and compatibility with **iOS 13+**, making it a reliable choice for projects targeting a wide range of iOS versions.
+**TagView** is a lightweight and customizable view for creating tag-like layouts in SwiftUI, powered by the maturity and flexibility of UIKit. It provides smooth animations, excellent performance, and compatibility with **iOS 26+**, making it a reliable choice for projects targeting a wide range of iOS versions.
 
 
 ![TagView example](Media/Example1.gif)
@@ -46,21 +46,6 @@ struct SomeItem: Identifiable {
 }
 
 
-final class TestViewModel: ObservableObject {
-    @Published var items: [SomeItem] = [
-        .init(name: "First"),
-        .init(name: "Second"),
-        .init(name: "Third"),
-        .init(name: "Fourth"),
-        .init(name: "Fifth"),
-    ]
-    
-    func removeItem(with id: SomeItem.ID) {
-        items.removeAll { $0.id == id }
-    }
-}
-
-
 struct TestTagView: View {
     var title: String
     var removeAction: () -> Void
@@ -90,14 +75,24 @@ struct TestTagView: View {
 
 
 struct TagTestView: View {
-    @ObservedObject var viewModel: ViewModel
+    @State private var items: [SomeItem] = [
+        .init(name: "First"),
+        .init(name: "Second"),
+        .init(name: "Third"),
+        .init(name: "Fourth"),
+        .init(name: "Fifth"),
+    ]
+    
+    func removeItem(with id: SomeItem.ID) {
+        items.removeAll { $0.id == id }
+    }
     
     var body: some View {
         // Feed the TagView with identifiable items
-        TagView(viewModel.items) { item in
+        TagView(items) { item in
             // Place your tag layout here
             TestTagView(title: item.name) {
-                viewModel.removeItem(with: item.id)
+                removeItem(with: item.id)
             }
         }
     }
@@ -117,8 +112,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ### Contributing
 
 Contributions, issues, and feature requests are welcome! Feel free to open a PR or submit issues via the GitHub repository.
-
-
-### Author
-
-[Evgenij Lutz](https://github.com/EvgenijLutz)
