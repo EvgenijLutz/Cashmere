@@ -301,12 +301,34 @@ public extension CMView {
 
 public extension CMView {
     @MainActor
-    // TODO: not fileprivate because getCurrentUIAnimationDuration uses it
-    /*fileprivate*/ static var isPerformingAnimation = false
+    enum CurrentAnimation {
+        // TODO: not fileprivate because getCurrentUIAnimationDuration uses it
+        /*fileprivate*/ static var isPerforming = false
+        static var animation: CMAnimation = .easeInOut
+        static var duration: TimeInterval = 0
+    }
+    
+    
+    enum CMAnimation {
+        case easeIn
+        case easeOut
+        case easeInOut
+        case spring
+        
+        var timingFunction: CAMediaTimingFunction {
+            switch self {
+            case .easeIn: CAMediaTimingFunction(name: .easeIn)
+            case .easeOut: CAMediaTimingFunction(name: .easeOut)
+            case .easeInOut: CAMediaTimingFunction(name: .easeInEaseOut)
+            case .spring: CAMediaTimingFunction(name: .linear)
+            }
+        }
+    }
+    
     
     var cmAnimatable: Self {
 #if os(macOS)
-        if Self.isPerformingAnimation {
+        if Self.CurrentAnimation.isPerforming {
             return self.animator()
         }
 #endif
@@ -314,32 +336,41 @@ public extension CMView {
         return self
     }
     
-    func performAnimation(_ animation: SwiftUI.Animation, _ changes: @MainActor @escaping () -> Void) {
+    
+    func performAnimation(_ animation: CMAnimation, duration: TimeInterval = 0.35, _ changes: @MainActor @escaping () -> Void) {
+        let oldIsAnimating = CMView.CurrentAnimation.isPerforming
+        let oldAnimation = CMView.CurrentAnimation.animation
+        let oldAnimationDuration = CMView.CurrentAnimation.duration
+        
+        CMView.CurrentAnimation.isPerforming = true
+        CMView.CurrentAnimation.animation = animation
+        CMView.CurrentAnimation.duration = duration
         #if os(macOS)
         NSAnimationContext.runAnimationGroup { context in
-            let oldIsAnimating = CMView.isPerformingAnimation
-            CMView.isPerformingAnimation = true
-            context.duration = 0.35
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.duration = duration
+            context.timingFunction = animation.timingFunction
             changes()
-            CMView.isPerformingAnimation = oldIsAnimating
         }
         #else
-        UIView.animate(withDuration: 0.35) {
-            let oldIsAnimating = CMView.isPerformingAnimation
-            CMView.isPerformingAnimation = true
+        UIView.animate(withDuration: duration) {
             changes()
-            CMView.isPerformingAnimation = oldIsAnimating
         }
         #endif
+        CMView.CurrentAnimation.duration = oldAnimationDuration
+        CMView.CurrentAnimation.animation = oldAnimation
+        CMView.CurrentAnimation.isPerforming = oldIsAnimating
     }
     
-    func withOrWithoutAnimation(_ animate: Bool, _ animation: SwiftUI.Animation, _ changes: @MainActor @escaping () -> Void) {
+    
+    func withOrWithoutAnimation(_ animate: Bool, _ animation: CMAnimation, duration: TimeInterval = 0.35, _ changes: @MainActor @escaping () -> Void) {
         if animate {
-            performAnimation(animation, changes)
+            performAnimation(animation, duration: duration, changes)
         }
         else {
+            //CATransaction.begin()
+            //CATransaction.setDisableActions(true)
             changes()
+            //CATransaction.commit()
         }
     }
     

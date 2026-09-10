@@ -26,7 +26,7 @@ public func getCurrentUIAnimationDuration() -> TimeInterval {
     return UIView.inheritedAnimationDuration
 #else
     // TODO: isPerformingAnimation is actially private. Move it then to PlatformView?
-    if CMView.isPerformingAnimation {
+    if CMView.CurrentAnimation.isPerforming {
         return NSAnimationContext.current.duration
     }
     
@@ -74,53 +74,79 @@ public extension CALayer {
 
 
 @MainActor
-public extension CALayer {
-    func setBoundsAnimatedIfNeeded(_ targetBounds: CGRect) {
-        let animationKey = "bounds key"
-        let duration = getCurrentUIAnimationDuration()
-        guard duration > 0.01 else {
-            CATransaction.withoutAnimations {
-                bounds = targetBounds
-            }
-            return
-        }
-        
-        let animation = CABasicAnimation(keyPath: "bounds")
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        animation.repeatCount = 0
-        //animation.beginTime = beginTime
-        animation.duration = duration
-        animation.fromValue = presentation()?.bounds ?? bounds
-        
-        bounds = targetBounds
-        
-        animation.toValue = targetBounds
-        add(animation, forKey: animationKey)
+fileprivate extension CALayer {
+    func apply(_ value: CAAnimation, forKey key: String) {
+        removeAnimation(forKey: key)
+        //setValue(value, forKey: key)
+        add(value, forKey: key)
     }
     
-    
-    func setFrameAnimatedIfNeeded(_ targetFrame: CGRect) {
-#if false
-        let animationKey = "frame key"
+    func performAnimatedIfNeeded<T>(_ value: T, keyPath: ReferenceWritableKeyPath<CALayer, T>, _ keyPathString: String) {
+        let animationKey = keyPathString + " key"
+        // TODO: 08.09.2026: Abandon getCurrentUIAnimationDuration and use isPerformingAnimation instead. Check getCurrentUIAnimationDuration only on view frame and bound change events
         let duration = getCurrentUIAnimationDuration()
         guard duration > 0.01 else {
             CATransaction.withoutAnimations {
-                frame = targetFrame
+                removeAnimation(forKey: animationKey)
+                self[keyPath: keyPath] = value
             }
             return
         }
         
-        let animation = CABasicAnimation(keyPath: "frame")
+        let animation = CABasicAnimation(keyPath: keyPathString)
         animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         animation.repeatCount = 0
         //animation.beginTime = beginTime
         animation.duration = duration
-        animation.fromValue = presentation()?.frame ?? frame
+        animation.fromValue = presentation()?[keyPath: keyPath] ?? self[keyPath: keyPath]
         
-        frame = targetFrame
+        CATransaction.withoutAnimations {
+            self[keyPath: keyPath] = value
+        }
         
-        animation.toValue = targetFrame
-        add(animation, forKey: animationKey)
+        animation.toValue = value
+        apply(animation, forKey: animationKey)
+    }
+}
+
+
+@MainActor
+fileprivate extension CAShapeLayer {
+    /// Same implementation as in ``CALayer.performAnimatedIfNeeded``
+    func performAnimatedIfNeeded<T>(_ value: T, keyPath: ReferenceWritableKeyPath<CAShapeLayer, T>, _ keyPathString: String) {
+        let animationKey = keyPathString + " key"
+        let duration = getCurrentUIAnimationDuration()
+        guard duration > 0.01 else {
+            CATransaction.withoutAnimations {
+                removeAnimation(forKey: animationKey)
+                self[keyPath: keyPath] = value
+            }
+            return
+        }
+        
+        let animation = CABasicAnimation(keyPath: keyPathString)
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        animation.repeatCount = 0
+        //animation.beginTime = beginTime
+        animation.duration = duration
+        animation.fromValue = presentation()?[keyPath: keyPath] ?? self[keyPath: keyPath]
+        
+        CATransaction.withoutAnimations {
+            self[keyPath: keyPath] = value
+        }
+        
+        animation.toValue = value
+        apply(animation, forKey: animationKey)
+    }
+}
+
+
+
+@MainActor
+public extension CALayer {
+    func setFrameAnimatedIfNeeded(_ targetFrame: CGRect) {
+#if false
+        performAnimatedIfNeeded(targetFrame, keyPath: \.frame, "frame")
 #else
         //frame = targetframe
         //setPositionAnimatedIfNeeded(targetFrame.origin)
@@ -134,135 +160,33 @@ public extension CALayer {
     }
     
     
+    func setBoundsAnimatedIfNeeded(_ targetBounds: CGRect) {
+        performAnimatedIfNeeded(targetBounds, keyPath: \.bounds, "bounds")
+    }
+    
+    
     func setContentsRectAnimatedIfNeeded(_ targetContentsRect: CGRect) {
-        let animationKey = "contentsRect key"
-
-        let duration = getCurrentUIAnimationDuration()
-        guard duration > 0.01 else {
-            CATransaction.withoutAnimations {
-                contentsRect = targetContentsRect
-            }
-            return
-        }
-        
-        let animation = CABasicAnimation(keyPath: "contentsRect")
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        animation.repeatCount = 0
-        //animation.beginTime = beginTime
-        animation.duration = duration
-        animation.fromValue = presentation()?.contentsRect ?? contentsRect
-        
-        contentsRect = targetContentsRect
-        
-        animation.toValue = targetContentsRect
-        //removeAnimation(forKey: animationKey)
-        add(animation, forKey: animationKey)
+        performAnimatedIfNeeded(targetContentsRect, keyPath: \.contentsRect, "contentsRect")
     }
     
     
     func setPositionAnimatedIfNeeded(_ targetPosition: CGPoint) {
-        let animationKey = "position key"
-        //let beginTime: CFTimeInterval = animation(forKey: animationKey)?.beginTime ?? 0
-        //if let animation = self.animation(forKey: animationKey) as? CABasicAnimation {
-        //    print("Reuse position animation")
-        //    position = targetPosition
-        //    animation.toValue = position
-        //    return
-        //}
-        
-#if true
-        let duration = getCurrentUIAnimationDuration()
-        guard duration > 0.01 else {
-            CATransaction.withoutAnimations {
-                position = targetPosition
-            }
-            return
-        }
-        
-        let animation = CABasicAnimation(keyPath: "position")
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        animation.repeatCount = 0
-        //animation.beginTime = beginTime
-        animation.duration = duration
-        animation.fromValue = presentation()?.position ?? position
-        
-        position = targetPosition
-        
-        animation.toValue = targetPosition
-        //removeAnimation(forKey: animationKey)
-        add(animation, forKey: animationKey)
-#else
-        position = targetPosition
-#endif
+        performAnimatedIfNeeded(targetPosition, keyPath: \.position, "position")
     }
     
     
     func setBoundsSizeAnimatedIfNeeded(_ targetSize: CGSize) {
-        let animationKey = "bounds.size key"
-        //let beginTime: CFTimeInterval = animation(forKey: animationKey)?.beginTime ?? 0
-        //if let animation = self.animation(forKey: "bounds.size key") as? CABasicAnimation {
-        //    print("Reuse bounds size animation")
-        //    bounds.size = targetSize
-        //    animation.toValue = bounds.size
-        //    return
-        //}
-        
-#if true
-        let duration = getCurrentUIAnimationDuration()
-        guard duration > 0.01 else {
-            CATransaction.withoutAnimations {
-                bounds.size = targetSize
-            }
-            return
-        }
-        
-        let animation = CABasicAnimation(keyPath: "bounds.size")
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        animation.repeatCount = 0
-        //animation.beginTime = beginTime
-        animation.duration = duration
-        animation.fromValue = presentation()?.bounds.size ?? bounds.size
-        
-        bounds.size = targetSize
-        
-        animation.toValue = targetSize
-        //removeAnimation(forKey: animationKey)
-        add(animation, forKey: animationKey)
-#else
-        bounds.size = targetSize
-#endif
+        performAnimatedIfNeeded(targetSize, keyPath: \.bounds.size, "bounds.size")
     }
     
     
     func setTransformAnimatedIfNeeded(_ targetTransform: CATransform3D) {
-        let animationKey = "transform key"
-        //let beginTime: CFTimeInterval = animation(forKey: animationKey)?.beginTime ?? 0
-        //if let animation = self.animation(forKey: "transform key") as? CABasicAnimation {
-        //    print("Reuse transform animation")
-        //    transform = targetTransform
-        //    animation.toValue = targetTransform
-        //}
-        
-        let duration = getCurrentUIAnimationDuration()
-        guard duration > 0.01 else {
-            CATransaction.withoutAnimations {
-                transform = targetTransform
-            }
-            return
-        }
-        
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        animation.repeatCount = 0
-        //animation.beginTime = beginTime
-        animation.duration = duration
-        animation.fromValue = presentation()?.transform ?? transform
-        
-        transform = targetTransform
-        
-        animation.toValue = targetTransform
-        //removeAnimation(forKey: animationKey)
-        add(animation, forKey: animationKey)
+        performAnimatedIfNeeded(targetTransform, keyPath: \.transform, "transform")
+    }
+    
+    
+    func setOpacityAnimatedIfNeeded(_ targetOpacity: Float) {
+        performAnimatedIfNeeded(targetOpacity, keyPath: \.opacity, "opacity")
     }
     
 }
@@ -271,30 +195,7 @@ public extension CALayer {
 @MainActor
 public extension CAShapeLayer {
     func setPathAnimatedIfNeeded(_ targetPath: CGPath) {
-        let animationKey = "path key"
-        //let beginTime: CFTimeInterval = animation(forKey: animationKey)?.beginTime ?? 0
-#if true
-        let duration = getCurrentUIAnimationDuration()
-        guard duration > 0.01 else {
-            path = targetPath
-            return
-        }
-        
-        let animation = CABasicAnimation(keyPath: "path")
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        animation.repeatCount = 0
-        //animation.beginTime = beginTime
-        animation.duration = duration
-        animation.fromValue = presentation()?.path ?? path
-        
-        path = targetPath
-        
-        animation.toValue = path
-        //removeAnimation(forKey: animationKey)
-        add(animation, forKey: animationKey)
-#else
-        path = targetPath
-#endif
+        performAnimatedIfNeeded(targetPath, keyPath: \.path, "path")
     }
     
 }
