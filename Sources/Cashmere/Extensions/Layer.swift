@@ -11,10 +11,18 @@ import CMPlatform
 
 @MainActor
 public extension CATransaction {
-    static func withoutAnimations(_ action: () -> Void) {
+    private static var disabledActions: Bool = false
+    static func withoutImplicitAnimations(_ action: () -> Void) {
+        if disabledActions {
+            action()
+            return
+        }
+        
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        disabledActions = true
         action()
+        disabledActions = false
         CATransaction.commit()
     }
 }
@@ -75,20 +83,14 @@ public extension CALayer {
 
 @MainActor
 fileprivate extension CALayer {
-    func apply(_ value: CAAnimation, forKey key: String) {
-        removeAnimation(forKey: key)
-        //setValue(value, forKey: key)
-        add(value, forKey: key)
-    }
-    
-    func performAnimatedIfNeeded<T>(_ value: T, keyPath: ReferenceWritableKeyPath<CALayer, T>, _ keyPathString: String) {
+    static func performAnimatedIfNeeded<V: CALayer, T>(_ value: T, on subject: V, keyPath: ReferenceWritableKeyPath<V, T>, _ keyPathString: String) {
         let animationKey = keyPathString + " key"
         // TODO: 08.09.2026: Abandon getCurrentUIAnimationDuration and use isPerformingAnimation instead. Check getCurrentUIAnimationDuration only on view frame and bound change events
         let duration = getCurrentUIAnimationDuration()
         guard duration > 0.01 else {
-            CATransaction.withoutAnimations {
-                removeAnimation(forKey: animationKey)
-                self[keyPath: keyPath] = value
+            CATransaction.withoutImplicitAnimations {
+                subject.removeAnimation(forKey: animationKey)
+                subject[keyPath: keyPath] = value
             }
             return
         }
@@ -98,14 +100,21 @@ fileprivate extension CALayer {
         animation.repeatCount = 0
         //animation.beginTime = beginTime
         animation.duration = duration
-        animation.fromValue = presentation()?[keyPath: keyPath] ?? self[keyPath: keyPath]
+        animation.fromValue = subject.presentation()?[keyPath: keyPath] ?? subject[keyPath: keyPath]
         
-        CATransaction.withoutAnimations {
-            self[keyPath: keyPath] = value
+        CATransaction.withoutImplicitAnimations {
+            subject[keyPath: keyPath] = value
         }
         
         animation.toValue = value
-        apply(animation, forKey: animationKey)
+        subject.removeAnimation(forKey: animationKey)
+        //subject.setValue(animation, forKey: animationKey)
+        subject.add(animation, forKey: animationKey)
+    }
+    
+    
+    func performAnimatedIfNeeded<T>(_ value: T, keyPath: ReferenceWritableKeyPath<CALayer, T>, _ keyPathString: String) {
+        Self.performAnimatedIfNeeded(value, on: self, keyPath: keyPath, keyPathString)
     }
 }
 
@@ -114,29 +123,7 @@ fileprivate extension CALayer {
 fileprivate extension CAShapeLayer {
     /// Same implementation as in ``CALayer.performAnimatedIfNeeded``
     func performAnimatedIfNeeded<T>(_ value: T, keyPath: ReferenceWritableKeyPath<CAShapeLayer, T>, _ keyPathString: String) {
-        let animationKey = keyPathString + " key"
-        let duration = getCurrentUIAnimationDuration()
-        guard duration > 0.01 else {
-            CATransaction.withoutAnimations {
-                removeAnimation(forKey: animationKey)
-                self[keyPath: keyPath] = value
-            }
-            return
-        }
-        
-        let animation = CABasicAnimation(keyPath: keyPathString)
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        animation.repeatCount = 0
-        //animation.beginTime = beginTime
-        animation.duration = duration
-        animation.fromValue = presentation()?[keyPath: keyPath] ?? self[keyPath: keyPath]
-        
-        CATransaction.withoutAnimations {
-            self[keyPath: keyPath] = value
-        }
-        
-        animation.toValue = value
-        apply(animation, forKey: animationKey)
+        Self.performAnimatedIfNeeded(value, on: self, keyPath: keyPath, keyPathString)
     }
 }
 

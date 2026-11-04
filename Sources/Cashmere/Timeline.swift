@@ -998,34 +998,39 @@ public class CMTimelineEditor: PlatformView {
     
     private func animateChange() {
         Task {
-            try await Task.sleep(nanoseconds: 1_000_000_000 / 2)
-            //try await Task.sleep(nanoseconds: 350_000_000)
-            
-            
-            @MainActor
-            func randomizeCollection(_ collection: TMCollection) {
-                for group in collection.groups {
-                    for axisIndex in group.axes.indices {
-                        for pointIndex in group.axes[axisIndex].points.indices {
-                            let point = group.axes[axisIndex].points[pointIndex].point
-                            group.axes[axisIndex].points[pointIndex].point = .init(x: point.x, y: .random(in: -1...1))
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000 / 2)
+                //try await Task.sleep(nanoseconds: 350_000_000)
+                
+                
+                @MainActor
+                func randomizeCollection(_ collection: TMCollection) {
+                    for group in collection.groups {
+                        for axisIndex in group.axes.indices {
+                            for pointIndex in group.axes[axisIndex].points.indices {
+                                let point = group.axes[axisIndex].points[pointIndex].point
+                                group.axes[axisIndex].points[pointIndex].point = .init(x: point.x, y: .random(in: -1...1))
+                            }
+                            group.axes[axisIndex].resetControlPoints()
                         }
-                        group.axes[axisIndex].resetControlPoints()
+                    }
+                    
+                    for child in collection.children {
+                        randomizeCollection(child)
                     }
                 }
                 
-                for child in collection.children {
-                    randomizeCollection(child)
+                for collection in contents.collections {
+                    randomizeCollection(collection)
+                    collection.resetControlPoints()
+                    _ = collection.updateLayout(level: 0, yOffset: 0, width: bounds.width, height: axisHeight, animated: true)
                 }
+                
+                animateChange()
             }
-            
-            for collection in contents.collections {
-                randomizeCollection(collection)
-                collection.resetControlPoints()
-                _ = collection.updateLayout(level: 0, yOffset: 0, width: bounds.width, height: axisHeight, animated: true)
+            catch {
+                print(error)
             }
-            
-            animateChange()
         }
     }
     
