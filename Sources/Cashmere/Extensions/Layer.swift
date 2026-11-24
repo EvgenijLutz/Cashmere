@@ -128,6 +128,15 @@ fileprivate extension CAShapeLayer {
 }
 
 
+@MainActor
+fileprivate extension CAGradientLayer {
+    /// Same implementation as in ``CALayer.performAnimatedIfNeeded``
+    func performAnimatedIfNeeded<T>(_ value: T, keyPath: ReferenceWritableKeyPath<CAGradientLayer, T>, _ keyPathString: String) {
+        Self.performAnimatedIfNeeded(value, on: self, keyPath: keyPath, keyPathString)
+    }
+}
+
+
 
 @MainActor
 public extension CALayer {
@@ -144,6 +153,11 @@ public extension CALayer {
         
         setBoundsSizeAnimatedIfNeeded(targetFrame.size)
 #endif
+    }
+    
+    
+    func setBackgroundColorAnimatedIfNeeded(_ backgroundColor: CGColor?) {
+        performAnimatedIfNeeded(backgroundColor, keyPath: \.backgroundColor, "backgroundColor")
     }
     
     
@@ -185,4 +199,12 @@ public extension CAShapeLayer {
         performAnimatedIfNeeded(targetPath, keyPath: \.path, "path")
     }
     
+}
+
+
+@MainActor
+public extension CAGradientLayer {
+    func setLocationsAnimatedIfNeeded(_ locations: [NSNumber]?) {
+        performAnimatedIfNeeded(locations, keyPath: \.locations, "locations")
+    }
 }

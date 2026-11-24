@@ -362,6 +362,8 @@ public extension CMView {
     }
     
     
+    /// Performs animated layout changes if the specified closure if needed.
+    /// - Parameter animate: executes the closure inside an animation block, otherwise just executes the closure.
     func withOrWithoutAnimation(_ animate: Bool, _ animation: CMAnimation, duration: TimeInterval = 0.35, _ changes: @MainActor @escaping () -> Void) {
         if animate {
             performAnimation(animation, duration: duration, changes)
